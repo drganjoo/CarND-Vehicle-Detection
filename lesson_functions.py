@@ -10,12 +10,31 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block,
                                 pixels_per_cell=(pix_per_cell, pix_per_cell),
                                 cells_per_block=(cell_per_block, cell_per_block), 
                                 transform_sqrt=True, 
-                                visualise=vis, 
-                                feature_vector=feature_vec,
-                                block_norm='L1-sqrt')
+                                visualise=vis, feature_vector=feature_vec)
+    #return features, hog_image
+    #return features
     return res
 
-# Define a function to compute binned color features
+def get_laplacian_hog(img, orient, pix_per_cell, cell_per_block, 
+                        vis=False, feature_vec=True):
+    img = cv2.GaussianBlur(img, (3,3), 0)
+    laplacian = cv2.Laplacian(img, cv2.CV_64F)
+
+    hog_features = []    
+    for channel in range(img.shape[2]):
+        channel_features = hog(laplacian[:,:,channel], orientations=orient, 
+                                pixels_per_cell=(pix_per_cell, pix_per_cell),
+                                cells_per_block=(cell_per_block, cell_per_block), 
+                                transform_sqrt=False, 
+                                visualise=vis, 
+                                feature_vector=feature_vec)
+        hog_features.append(channel_features)
+
+    #return features, hog_image
+    #return features
+    return np.ravel(hog_features)
+
+# Define a function to compute binned color features  
 def bin_spatial(img, size=(32, 32)):
     # Use cv2.resize().ravel() to create the feature vector
     features = cv2.resize(img, size).ravel() 
@@ -23,54 +42,29 @@ def bin_spatial(img, size=(32, 32)):
     return features
 
 # Define a function to compute color histogram features 
-# NEED TO CHANGE bins_range if reading .png files with mpimg!
 def color_hist(img, nbins=32, bins_range=(0, 256)):
-    # if (np.max(img[:,:,0]) <= 1) and (bins_range[1] > 1):
-    #     print('Looks like you are reading PNG with 0..1 but calling bins_range with 0..256')
-
     # Compute the histogram of the color channels separately
-    channel_hist = []
-    if len(img.shape) > 2:
-        for i in range(img.shape[-1]):
-            channel_hist.append(np.histogram(img[:,:,i], bins=nbins, range=bins_range)[0])
-    else:
-        channel_hist.append(np.histogram(img, bins=nbins, range=bins_range)[0])
-
+    channel1_hist = np.histogram(img[:,:,0], bins=nbins, range=bins_range)
+    channel2_hist = np.histogram(img[:,:,1], bins=nbins, range=bins_range)
+    channel3_hist = np.histogram(img[:,:,2], bins=nbins, range=bins_range)
     # Concatenate the histograms into a single feature vector
-    hist_features = np.concatenate(channel_hist)
+    hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
+    # Return the individual histograms, bin_centers and feature vector
     return hist_features
-
-def load_image(file, color_space):
-    # Read in each one by one
-    img = cv2.imread(file)
-    # apply color conversion if other than 'RGB'
-    space = eval('cv2.COLOR_BGR2' + color_space)
-    return cv2.cvtColor(img, space)
-
-def laplacian_features(channel):
-    img = cv2.GaussianBlur(channel, (3,3), 0)
-    img_32 = cv2.resize(img, (32,32))
-    laplacian_32 = cv2.Laplacian(img_32, cv2.CV_64F)
-    return laplacian_32.ravel()
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
 def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
                         hist_bins=32, orient=9, 
-                        pix_per_cell=8, cell_per_block=2, 
-                        hog_channel = [0],
-                        spatial_feat=True, 
-                        hist_feat=False, 
-                        laplacian_feat = True,
-                        hog_feat=True):
+                        pix_per_cell=8, cell_per_block=2, hog_channel=0,
+                        spatial_feat=True, hist_feat=True, hog_feat=True):
     # Create a list to append feature vectors to
     features = []
     # Iterate through the list of images
     for file in imgs:
         file_features = []
-
+        # Read in each one by one
         feature_image = load_image(file, color_space)
-
         if spatial_feat == True:
             spatial_features = bin_spatial(feature_image, size=spatial_size)
             file_features.append(spatial_features)
@@ -78,20 +72,24 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
             # Apply color_hist()
             hist_features = color_hist(feature_image, nbins=hist_bins)
             file_features.append(hist_features)
-        if laplacian_feat == True:
-            lap_features = laplacian_features(feature_image[:,:,0])
-            file_features.append(lap_features)
         if hog_feat == True:
-            # Call get_hog_features() with vis=False, feature_vec=True
-            hog_features = []
-            for channel in hog_channel:
-                hog_features.append(get_hog_features(feature_image[:,:,channel], 
-                                    orient, pix_per_cell, cell_per_block, 
-                                    vis=False, feature_vec=True))
-            hog_features = np.ravel(hog_features)
-
+        # Call get_hog_features() with vis=False, feature_vec=True
+            if hog_channel == 'ALL':
+                hog_features = []
+                for channel in range(feature_image.shape[2]):
+                    hog_features.append(get_hog_features(feature_image[:,:,channel], 
+                                        orient, pix_per_cell, cell_per_block, 
+                                        vis=False, feature_vec=True))
+                hog_features = np.ravel(hog_features)        
+            else:
+                hog_features = get_hog_features(feature_image[:,:,hog_channel], orient, 
+                            pix_per_cell, cell_per_block, vis=False, feature_vec=True)
             # Append the new feature vector to the features list
             file_features.append(hog_features)
+        
+        lap_hog = get_laplacian_hog(feature_image, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+        file_features.append(lap_hog)
+
         features.append(np.concatenate(file_features))
     # Return list of feature vectors
     return features
@@ -101,8 +99,7 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
 # window size (x and y dimensions),  
 # and overlap fraction (for both x and y)
 def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None], 
-                    xy_window=(64, 64), 
-                    xy_overlap=(0.5, 0.5)):
+                    xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
     # If x and/or y start/stop positions not defined, set to image size
     if x_start_stop[0] == None:
         x_start_stop[0] = 0
@@ -154,45 +151,51 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     return imcopy
 
 
-def abs_sobel_thresh(channel, orient='x', sobel_kernel=3, thresh=(0, 255)):
-    if orient == 'x':
-        sobel = cv2.Sobel(channel, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    else:
-        sobel = cv2.Sobel(channel, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+def load_image(file, color_space):
+    # Read in each one by one
+    img = cv2.imread(file)
+    space = eval('cv2.COLOR_BGR2' + color_space)
+    return cv2.cvtColor(img, space)
 
-    abs_sobel = np.abs(sobel)
-    scaled = np.uint8(255.0 * abs_sobel / np.max(abs_sobel))
+def laplacian_features(channel):
+    img = cv2.GaussianBlur(channel, (3,3), 0)
+    img_32 = cv2.resize(img, (32,32))
+    laplacian_32 = cv2.Laplacian(img_32, cv2.CV_64F)
+    return laplacian_32.ravel()
 
-    mask = (scaled >= thresh[0]) & (scaled <= thresh[1])
+def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None], 
+                    xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
+    window_list = []
+    
+    x_start = x_start_stop[0] if x_start_stop[0] is not None else 0
+    x_end = x_start_stop[1] if x_start_stop[1] is not None else img.shape[1]
+    y_start = y_start_stop[0] if y_start_stop[0] is not None else 0
+    y_end = y_start_stop[1] if y_start_stop[1] is not None else img.shape[0]
 
-    grad_binary = np.zeros_like(channel)
-    grad_binary[mask] = 1
-    return grad_binary
+    space = [x_end - x_start, y_end - y_start]
 
+    dx = int(xy_window[0] * (1 - xy_overlap[0]))
+    dy = int(xy_window[1] * (1 - xy_overlap[1]))
 
-def mag_thresh(channel, sobel_kernel=3, mag_thresh=(0, 255)):
-    sobelx = cv2.Sobel(channel, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    sobely = cv2.Sobel(channel, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    no_of_boxes_x = int((space[0] - xy_window[0]) / dx) + 1
+    no_of_boxes_y = int((space[1] - xy_window[1]) / dy) + 1
+    
+    x_end = x_start + no_of_boxes_x * dx
+    y_end = y_start + no_of_boxes_y * dy
 
-    mag = np.sqrt(sobelx ** 2 + sobely ** 2)
-    scaled = np.uint8(255.0 * mag / np.max(mag))
+#     x_pts = np.arange(x_start, x_end, dx).astype(int)
+#     y_pts = np.arange(y_start, y_end, dy).astype(int)
 
-    mask = (scaled >= mag_thresh[0]) & (scaled <= mag_thresh[1])
-
-    mag_binary = np.zeros_like(channel)
-    mag_binary[mask] = 1
-    return mag_binary
-
-def dir_threshold(channel, sobel_kernel=3, thresh_deg=(0, 90)):
-    sobelx = cv2.Sobel(channel, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
-    sobely = cv2.Sobel(channel, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
-
-    dir_sobel = np.arctan2(np.abs(sobely), np.abs(sobelx))
-
-    thresh_rad = [thresh_deg[0] * np.pi / 180.0, thresh_deg[1] * np.pi / 180.0]
-    mask = (dir_sobel >= thresh_rad[0]) & (dir_sobel <= thresh_rad[1])
-
-    dir_binary = np.zeros_like(channel)
-    dir_binary[mask] = 1
-    return dir_binary
-
+#     window_list = [((x,y),
+#                    (int(x + xy_window[0]), int(y + xy_window[1]))) 
+#                    for y in y_pts for x in x_pts]
+    
+    for y in range(no_of_boxes_y):
+        for x in range(no_of_boxes_x):
+            x1 = x_start + x * dx
+            x2 = x1 + xy_window[0]
+            y1 = y_start + y * dy
+            y2 = y1 + xy_window[1]
+            
+            window_list.append(((x1,y1),(x2,y2)))
+    return window_list

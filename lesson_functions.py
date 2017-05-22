@@ -16,25 +16,27 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block,
     #return features
     return res
 
-def get_laplacian_hog(img, orient, pix_per_cell, cell_per_block, 
-                        vis=False, feature_vec=True):
-    img = cv2.GaussianBlur(img, (3,3), 0)
-    laplacian = cv2.Laplacian(img, cv2.CV_64F)
+# def get_laplacian_hog(img, orient, pix_per_cell, cell_per_block, 
+#                         vis=False, 
+#                         feature_vec=True):
+    
+#     img = cv2.GaussianBlur(img, (3,3), 0)
+#     laplacian = cv2.Laplacian(img, cv2.CV_64F)
 
-    hog_features = []    
-    for channel in range(img.shape[2]):
-        channel_features = hog(laplacian[:,:,channel], orientations=orient, 
-                                pixels_per_cell=(pix_per_cell, pix_per_cell),
-                                cells_per_block=(cell_per_block, cell_per_block), 
-                                transform_sqrt=False, 
-                                visualise=vis, 
-                                feature_vector=feature_vec,
-                                block_norm='L2-Hys')
-        hog_features.append(channel_features)
+#     hog_features = []    
+#     for channel in hog_channel:
+#         channel_features = hog(laplacian[:,:,channel], orientations=orient, 
+#                                 pixels_per_cell=(pix_per_cell, pix_per_cell),
+#                                 cells_per_block=(cell_per_block, cell_per_block), 
+#                                 transform_sqrt=False, 
+#                                 visualise=vis, 
+#                                 feature_vector=feature_vec,
+#                                 block_norm='L2-Hys')
+#         hog_features.append(channel_features)
 
-    #return features, hog_image
-    #return features
-    return np.ravel(hog_features)
+#     #return features, hog_image
+#     #return features
+#     return np.ravel(hog_features)
 
 # Define a function to compute binned color features  
 def bin_spatial(img, size=(32, 32)):
@@ -56,11 +58,11 @@ def color_hist(img, nbins=32, bins_range=(0, 256)):
 
 def extract_feature_image(feature_image, spatial_size=(32, 32),
                         hist_bins=32, orient=9, 
-                        pix_per_cell=8, cell_per_block=2, hog_channel=0,
+                        pix_per_cell=8, cell_per_block=2, hog_channel=[0],
                         spatial_feat = True, 
                         hist_feat = True, 
-                        hog_feat = True,
-                        laplacian_feat = True):
+                        hog_feat = True):
+                        #laplacian_feat = True):
 
     file_features = []
 
@@ -74,22 +76,18 @@ def extract_feature_image(feature_image, spatial_size=(32, 32),
 
     if hog_feat == True:
     # Call get_hog_features() with vis=False, feature_vec=True
-        if hog_channel == 'ALL':
-            hog_features = []
-            for channel in range(feature_image.shape[2]):
-                hog_features.append(get_hog_features(feature_image[:,:,channel], 
-                                    orient, pix_per_cell, cell_per_block, 
-                                    vis=False, feature_vec=True))
-            hog_features = np.ravel(hog_features)        
-        else:
-            hog_features = get_hog_features(feature_image[:,:,hog_channel], orient, 
-                        pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+        hog_features = []
+        for channel in hog_channel:
+            hog_features.append(get_hog_features(feature_image[:,:,channel], 
+                                orient, pix_per_cell, cell_per_block, 
+                                vis=False, feature_vec=True))
+        hog_features = np.ravel(hog_features)        
         # Append the new feature vector to the features list
         file_features.append(hog_features)
     
-    if laplacian_feat == True:
-        lap_hog = get_laplacian_hog(feature_image, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
-        file_features.append(lap_hog)
+    # if laplacian_feat == True:
+    #     lap_hog = get_laplacian_hog(feature_image, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+    #     file_features.append(lap_hog)
 
     return np.concatenate(file_features)
     
@@ -98,8 +96,9 @@ def extract_feature_image(feature_image, spatial_size=(32, 32),
 # Have this function call bin_spatial() and color_hist()
 def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
                         hist_bins=32, orient=9, 
-                        pix_per_cell=8, cell_per_block=2, hog_channel=0,
-                        spatial_feat=True, hist_feat=True, hog_feat=True, laplacian_feat = True):
+                        pix_per_cell=8, cell_per_block=2, hog_channel=[0],
+                        spatial_feat=True, hist_feat=True, hog_feat=True):
+                        # laplacian_feat = True):
     # Create a list to append feature vectors to
     features = []
     # Iterate through the list of images
@@ -109,7 +108,7 @@ def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
         file_features = extract_feature_image(feature_image, spatial_size=spatial_size,
                             hist_bins = hist_bins, orient=orient, pix_per_cell = pix_per_cell,
                             cell_per_block=cell_per_block, hog_channel = hog_channel,
-                            spatial_feat = spatial_feat, hist_feat = hist_feat, hog_feat = hog_feat, laplacian_feat = laplacian_feat)
+                            spatial_feat = spatial_feat, hist_feat = hist_feat, hog_feat = hog_feat) #laplacian_feat = laplacian_feat)
         features.append(file_features)
     # Return list of feature vectors
     return features
@@ -177,11 +176,11 @@ def load_image(file, color_space):
     space = eval('cv2.COLOR_BGR2' + color_space)
     return cv2.cvtColor(img, space)
 
-def laplacian_features(channel):
-    img = cv2.GaussianBlur(channel, (3,3), 0)
-    img_32 = cv2.resize(img, (32,32))
-    laplacian_32 = cv2.Laplacian(img_32, cv2.CV_64F)
-    return laplacian_32.ravel()
+# def laplacian_features(channel):
+#     img = cv2.GaussianBlur(channel, (3,3), 0)
+#     img_32 = cv2.resize(img, (32,32))
+#     laplacian_32 = cv2.Laplacian(img_32, cv2.CV_64F)
+#     return laplacian_32.ravel()
 
 def get_boxes(img, x_start_stop=[None, None], y_start_stop=[None,None],
               box=(64,64), offset_factor=(1,1), no_of_boxes = None, draw_color = None):

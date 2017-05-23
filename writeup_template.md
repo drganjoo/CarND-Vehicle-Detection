@@ -1,69 +1,207 @@
-##Writeup Template
-###You can use this file as a template for your writeup if you want to submit it as a markdown file, but feel free to use some other method and submit a pdf if you prefer.
+# Vehicle Detection Project
 
----
-
-**Vehicle Detection Project**
-
-The goals / steps of this project are the following:
-
-* Perform a Histogram of Oriented Gradients (HOG) feature extraction on a labeled training set of images and train a classifier Linear SVM classifier
-* Optionally, you can also apply a color transform and append binned color features, as well as histograms of color, to your HOG feature vector. 
-* Note: for those first two steps don't forget to normalize your features and randomize a selection for training and testing.
-* Implement a sliding-window technique and use your trained classifier to search for vehicles in images.
-* Run your pipeline on a video stream (start with the test_video.mp4 and later implement on full project_video.mp4) and create a heat map of recurring detections frame by frame to reject outliers and follow detected vehicles.
-* Estimate a bounding box for vehicles detected.
 
 [//]: # (Image References)
-[image1]: ./examples/car_not_car.png
-[image2]: ./examples/HOG_example.jpg
-[image3]: ./examples/sliding_windows.jpg
-[image4]: ./examples/sliding_window.jpg
-[image5]: ./examples/bboxes_and_heat.png
-[image6]: ./examples/labels_map.png
-[image7]: ./examples/output_bboxes.png
-[video1]: ./project_video.mp4
+[distribution]: ./output_images/data-distribution.png
+[augmented-not-cars]: ./output_images/augmented-not-cars.png
+[cars-lab]: ./output_images/cars-lab.png
+[notcars-lab]: ./output_images/notcars-lab.png
+[car-hogs-8x4x9]: ./output_images/car-hogs-8x4x9.png
+[car-hogs-8x4x12]: ./output_images/car-hogs-8x4x12.png
+[car-hogs-16x4x12]: ./output_images/car-hogs-16x4x12.png
+[notcar-hogs-8x4x9]: ./output_images/notcar-hogs-8x4x9.png
+[notcar-hogs-8x4x12]:./output_images/notcar-hogs-8x4x12.png
+[notcar-hogs-16x4x12]:./output_images/notcar-hogs-16x4x12.png
+[window-shapes]:./output_images/window_shapes.png
 
-## [Rubric](https://review.udacity.com/#!/rubrics/513/view) Points
-###Here I will consider the rubric points individually and describe how I addressed each point in my implementation.  
+## Training SVM
 
----
-###Writeup / README
+Overall solution has been coded in two jupyter notebooks:
 
-####1. Provide a Writeup / README that includes all the rubric points and how you addressed each one.  You can submit your writeup as markdown or pdf.  [Here](https://github.com/udacity/CarND-Vehicle-Detection/blob/master/writeup_template.md) is a template writeup for this project you can use as a guide and a starting point.  
+[VehicleDetection-Training](training.ipynb)  
+[VehicleDetection-Process](process.ipynb)
 
-You're reading it!
+### Data Used
 
-###Histogram of Oriented Gradients (HOG)
+Mostly used GTI and KITTI car / not-car images that were given as part of [vehicles.zip](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/vehicles.zip) and [non-vehicles.zip](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/non-vehicles.zip)
 
-####1. Explain how (and identify where in your code) you extracted HOG features from the training images.
+During testing a lot of times the yellow lane line was being misclassified as a car, therefore I generated a number of smaller 64x64 images from the first 100 frames of the video, which had no car visible and used them as part of non-vehicles set.
 
-The code for this step is contained in the first code cell of the IPython notebook (or in lines # through # of the file called `some_file.py`).  
+### Data Distribution
 
-I started by reading in all the `vehicle` and `non-vehicle` images.  Here is an example of one of each of the `vehicle` and `non-vehicle` classes:
+Made sure that almost equal number of car and non-car test images were available for training:
 
-![alt text][image1]
+![distribution]
 
-I then explored different color spaces and different `skimage.hog()` parameters (`orientations`, `pixels_per_cell`, and `cells_per_block`).  I grabbed random images from each of the two classes and displayed them to get a feel for what the `skimage.hog()` output looks like.
+Initially a lot of yellow lane lines were being wrongly identified as cars, therefore I augmented the training data with some non-vehicle images generated from video frames. About 521 such images have been added. Following is a small sample of such images:
 
-Here is an example using the `YCrCb` color space and HOG parameters of `orientations=8`, `pixels_per_cell=(8, 8)` and `cells_per_block=(2, 2)`:
+![augmented-not-cars]
+
+### Histogram of Oriented Gradients (HOG)
+
+#### Color Spaces Exploration
+
+Explored, LUV, LAB, RGB and YCrCb color spaces.
+
+To check each color space, wrote code that would randomly pick up 5 car and 5 non-car samples, convert them to a particular color space and would display their individual channels on screen (Code block # 2 of [training]). 
+
+![cars-lab]
+![notcars-lab]
+
+#### Hog Display
+
+Tried various HOG parameters by changing values manually but later on wrote a jupyter notebook (TestSVMParams) in which the following parameters were defined in a dictionary, each one was run against the same Train / Test split and in the end the best one was chosen.
 
 
-![alt text][image2]
+```
+params = [
+    {
+        'pix_per_cell' : 16,
+        'cell_per_block' : 4,
+        'orient': 12,
+    },
+    {
+        'pix_per_cell' : 8,
+        'cell_per_block' : 4,
+        'orient': 9,
+    },
+    {
+        'pix_per_cell' : 8,
+        'cell_per_block' : 4,
+        'orient': 12,
+    },
+    {
+        'pix_per_cell' : 16,
+        'cell_per_block' : 2,
+        'orient': 9,
+    },
+    {
+        'pix_per_cell' : 16,
+        'cell_per_block' : 2,
+        'orient': 16,
+    },
+    {
+        'pix_per_cell' : 17,
+        'cell_per_block' : 2,
+        'orient': 16,
+    },
+]
 
-####2. Explain how you settled on your final choice of HOG parameters.
+```
 
-I tried various combinations of parameters and...
+In order to make sure that each parameter was being run against the same set of train/test split, all filenames were combined into an array and the indices of that array were split between training / testing sets. 
 
-####3. Describe how (and identify where in your code) you trained a classifier using your selected HOG features (and color features if you used them).
+```
+all_filenames = np.hstack((cars, notcars))
 
-I trained a linear SVM using...
+X_indices = np.arange(len(all_filenames))
+y = np.hstack((np.ones(len(cars)), np.zeros(len(notcars))))
 
-###Sliding Window Search
+rand_state = np.random.randint(0, 100)
+X_train_indices, X_test_indices, y_train, y_test = train_test_split(X_indices, y, test_size=0.2, random_state=rand_state)
 
-####1. Describe how (and identify where in your code) you implemented a sliding window search.  How did you decide what scales to search and how much to overlap windows?
+```
 
-I decided to search random window positions at random scales all over the image and came up with this (ok just kidding I didn't actually ;):
+**Some HOG visual displays:**
+
+*Pix/Cell: 8, Cells/Block: 4, Orientation: 9, Feature Size/Channel: **3600***
+
+![car-hogs-8x4x9]
+![notcar-hogs-8x4x9]
+
+*Pix/Cell: 8, Cells/Block: 4, Orientation: 12, Feature Size/Channel: **4800***
+
+![car-hogs-8x4x12]
+![notcar-hogs-8x4x12]
+
+
+*Pix/Cell: 16, Cells/Block: 4, Orientation: 12, Feature Size/Channel: **192***
+
+![car-hogs-16x4x12]
+![notcar-hogs-16x4x12]
+
+### Other Stuff Explored
+
+*Laplacian Hog*
+
+Also tried creating a Laplacian from RGB and then using HOG but that didn't prove to useful.
+
+*Sobel X / Y*
+
+Tried using Sobel X, Sobel Y or a combination of them but that actually decreased the overall fit on the training set
+
+#### HOG Final Choice
+
+Ran LinearSVM for each of the above given parameters for three color spaces LUV, LAB and YCrCb. In the end, I settled for the following parameters defined in [process.ipynb](process.ipynb) block labeled *Features Chosen*:
+
+|Parameter|Value|
+|-|-|
+|pix_per_cell  |8  |
+|cell_per_block | 4  |
+|orient | 12  |
+|spatial_feat | True  |
+|hist_feat | True  |
+|hog_feat | True |
+|color_spaces | ['LAB']  |
+|hog_channel | [0]| 
+|spatial_size | (32,32)|
+|hist_bins | 32|
+
+Total feature size:  7968
+
+#### Classifier Training
+
+I've used a LinearSVC ([training](training.ipynb) Block Labelled: 'SVM Training') with the above parameters. For normalization I've used StandardScalar, but I do not include the test set in normalizing. Only the training set is used for normalizing and then the test is transformed using the parameters learned from training.
+
+```
+car_features = extract_features(cars, color_space=color_space, orient=orient, pix_per_cell=pix_per_cell,
+                               cell_per_block=cell_per_block, hog_channel=hog_channel,
+                               spatial_feat = spatial_feat,
+                               spatial_size = spatial_size,
+                               hist_feat = hist_feat,
+                               hog_feat = hog_feat)
+notcar_features = extract_features(notcars, color_space=color_space, orient=orient, pix_per_cell=pix_per_cell,
+                               cell_per_block=cell_per_block, hog_channel=hog_channel,
+                               spatial_feat = spatial_feat,
+                               spatial_size = spatial_size,
+                               hist_feat = hist_feat,
+                               hog_feat = hog_feat)
+
+X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
+y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
+
+rand_state = np.random.randint(0, 100)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=rand_state)
+
+X_train_scaler = StandardScaler().fit(X_train)
+X_train = X_train_scaler.transform(X_train)
+X_test = X_train_scaler.transform(X_test)
+
+# Learning
+
+svc = LinearSVC()
+svc.fit(X_train, y_train)
+
+print('Train Accuracy of SVC = ', round(svc.score(X_train, y_train), 4))
+print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
+
+```
+
+## Sliding Window Search
+
+#### Window Scales
+
+I settled on three different scales based on detecting cars that are close by, then furher up and then farthest. In the following image the left hand side shows individual window sizes with no overlapping, just to give an idea of where the boxes search. On the right hand side it shows the same boxes with overlapping.
+
+These are defined in [process.ipynb](process.ipynb) block labeled *Different Sliding Window Sizes*
+
+|Window Name|Window Size|Overlapping|X Start / Stop | Y Start / Stop|
+|-|-|-|-|-|
+|Medium|175x160|0.4, 0|0, img.shape[1]|400,600|
+|Small|160x120|0.3, 0.5|0, img.shape[1]|390,550|
+|Smallest|80x70|0.2, 0.2|100, img.shape[1] - 100|400,480|
+
+![window-shapes]
 
 ![alt text][image3]
 

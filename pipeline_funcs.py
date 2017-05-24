@@ -6,9 +6,10 @@ import glob
 import glob
 import time
 from scipy.ndimage.measurements import label
-
+import threading
 import matplotlib.pyplot as plt
 from lesson_functions import *
+from boxes import *
 
 svc = None
 X_train_scaler = None
@@ -30,6 +31,21 @@ with open('svm.p', 'rb') as f:
 
 print('Using Space Conversion: cv2.COLOR_RGB2' + color_space)
 color_space_code = eval('cv2.COLOR_RGB2' + color_space)
+
+class CarDetector(threading.Thread):
+    def __init__(self, img_cs, boxes, global_box_no):
+        threading.Thread.__init__(self)
+        self.boxes = boxes
+        self.img_cs = img_cs
+        self.car_boxes = []
+        self.car_box_nos = []
+        self.global_box_no = global_box_no
+        
+    def run(self):
+        for box_no, box in enumerate(self.boxes):
+            if has_car(self.img_cs, box):
+                self.car_boxes.append(box)
+                self.car_box_nos.append(self.global_box_no + box_no)
 
 def get_box_features(box_img_cs):
     if box_img_cs.shape[0] != 64 or box_img_cs.shape[1] != 64:
@@ -55,101 +71,59 @@ def has_car(img_cs, box):
     features = get_box_features(box_img_64)
     return svc.predict(features)
 
-def medium_box(img, draw_color = None, no_of_boxes = None, offset = (-0.4, 0)):
-    #x_start = 660
-    x_start = 0
-    x_stop = img.shape[1]
-    y_start = 400
-    y_stop = 600
-    #box=(175,160)
-    box=(11*16, 11*16)
 
-    return get_boxes(img, 
-          x_start_stop = (x_start, x_stop), 
-          y_start_stop = (y_start, y_stop),
-          box=box, 
-          draw_color = draw_color, 
-          no_of_boxes = no_of_boxes,
-          offset_factor = offset)
-    
-def small_box(img, draw_color = None, no_of_boxes = None, offset = (-0.3, 0.5)):
-    #x_start = 600
-    x_start = 0
-    x_stop = img.shape[1]
-    y_start = 390
-    y_stop = 550
-    #box=(160,120)
-    box=(7*16, 7*16)
-
-    return get_boxes(img, 
-          x_start_stop = (x_start, x_stop), 
-          y_start_stop = (y_start, y_stop),
-          box=box, 
-          draw_color=draw_color, 
-          no_of_boxes = no_of_boxes,
-          offset_factor = offset)
-
-
-def smallest_box(img, draw_color = None, no_of_boxes = None, offset = (-0.2, 0.5)):
-    #x_start = 600
-    # box = (80,70)
-    box=(5*16, 5*16)
-    x_start = 20
-    x_stop = img.shape[1] - 20
-    y_start = 400
-    y_stop = y_start + 70 + 40
-
-    return get_boxes(img, 
-          x_start_stop = (x_start, x_stop), 
-          y_start_stop = (y_start, y_stop),
-          box=box, 
-          draw_color = draw_color, 
-          no_of_boxes = no_of_boxes,
-          offset_factor=offset)
-
-def tiny_box(img, draw_color = None, no_of_boxes = None, offset = (-0.5, 0.5)):
-    #x_start = 600
-    x_start = 120
-    x_stop = img.shape[1] - 120
-    y_start = 300
-    y_stop = 450
-    box=(64,64)
-
-    return get_boxes(img, 
-          x_start_stop = (x_start, x_stop), 
-          y_start_stop = (y_start, y_stop),
-          box=box, 
-          draw_color = draw_color, 
-          no_of_boxes = no_of_boxes,
-          offset_factor=offset)
-
-def get_all_boxes(img):
-    boxes = []
-    #boxes.extend(big_box(img))
-    boxes.extend(medium_box(img))
-    boxes.extend(small_box(img))
-    boxes.extend(smallest_box(img))
-    #boxes.extend(tiny_box(img))
-    return boxes
+thread_boxes = []
 
 def detect_cars(img, all_boxes = False):
+    global thread_boxes
     img_cs = cv2.cvtColor(img, color_space_code)
-    
-    boxes = get_all_boxes(img_cs)
-    print(len(boxes))
+
+    if len(thread_boxes) == 0:
+        boxes = get_all_boxes(img_cs)
+
+        thread_boxes = []
+        per_thread = len(boxes) // 1
+
+        for i in range(0, len(boxes), per_thread):
+            if i + per_thread < len(boxes):
+                #print(i,i + per_thread)
+                box_range = boxes[i:i + per_thread]
+            else:
+                #print(i,' Till End')
+                box_range = boxes[i:]
+            thread_boxes.append((box_range, i))
+
+    threads = []
+    for box_range, box_no in thread_boxes:
+        thread = CarDetector(img_cs, box_range, box_no)
+        threads.append(thread)
+        thread.start()
+
     car_boxes = []
-    notcar_boxes = []
+    for thread in threads:
+        thread.join()
+        car_boxes.extend(thread.car_boxes)
     
-    for box in boxes:
-        if has_car(img_cs, box):
-            car_boxes.append(box)
-        else:
-            notcar_boxes.append(box)
+    return car_boxes
+# def detect_cars(img, all_boxes = False):
+#     img_cs = cv2.cvtColor(img, color_space_code)
+    
+#     boxes = get_all_boxes(img_cs)
+
+#     print(len(boxes))
+#     car_boxes = []
+#     notcar_boxes = []
+    
+#     for box in boxes:
+#         if has_car(img_cs, box):
+#             car_boxes.append(box)
+#         else:
+#             notcar_boxes.append(box)
             
-    if not all_boxes:
-        return car_boxes
-    else:
-        return car_boxes, notcar_boxes
+#     if not all_boxes:
+#         return car_boxes
+#     else:
+#         return car_boxes, notcar_boxes
 
 def heatmap_threshold(heatmap, threshold):
     heatmap[heatmap < threshold] =  0
@@ -206,8 +180,82 @@ def get_heat_img(img, heatmap):
     return cv2.addWeighted(img, 0.4, heat_img, 0.6, 0)
     #return heat_img
 
-def draw_car_notcar(img, car_boxes, boxes):
+def draw_car_notcar(img, car_boxes, notcar_boxes):
     for box in notcar_boxes:
         cv2.rectangle(img, box[0], box[1], (255,0,0), 4)
     for box in car_boxes:
         cv2.rectangle(img, box[0], box[1], (0,255,0), 6)
+
+# def block_from_pix(pix, n_blocks):
+#     cell_no = pix // pix_per_cell
+#     block_no = cell_no // cell_per_block
+    
+#     if block_no > n_blocks:
+#         block_no = n_blocks - 1
+#     return block_no
+
+# def get_hog_dimensions(width, height, pixel_per_cell = 16, cell_per_block = 2, orient = 12):
+#     n_cells_x = width // pix_per_cell
+#     n_cells_y = height // pix_per_cell
+#     n_blocks_x = n_cells_x - cell_per_block + 1
+#     n_blocks_y = n_cells_y - cell_per_block + 1
+#     return (n_blocks_y, n_blocks_x, cell_per_block, cell_per_block, orient)
+
+# def subsample(features_org, boxes):
+#     hog_64 = get_hog_dimensions(64,64,pix_per_cell,cell_per_block,orient)
+#     hog_length_64 = hog_64[0] * hog_64[1] * hog_64[2] * hog_64[3] * hog_64[4]
+
+# #     print('Original hog length:', hog_length_64)
+#     pix_per_block = cell_per_block * cell_per_block * pix_per_cell
+# #     print('Pixels per block:', pix_per_block)
+    
+#     sub_hogs = []
+    
+#     for box in boxes:
+#         pix = []
+        
+#         sub_w = box[1][0] - box[0][0]
+#         sub_h = box[1][1] - box[0][1]
+
+#         sub_n_cells_x = sub_w // pix_per_cell
+#         sub_n_cells_y = sub_h // pix_per_cell
+#         sub_n_blocks_x = sub_n_cells_x - cell_per_block + 1
+#         sub_n_blocks_y = sub_n_cells_y - cell_per_block + 1
+        
+# #         print('Box:', box)
+# #         print('Block Start Y:', y1)
+# #         print('Block Start X:', x1)
+# #         print('Block End y:', y2)
+# #         print('Block End x:', x2)
+# #         print('Box # of blocks_x:', sub_n_blocks_x)
+# #         print('Box # of blocks_y:', sub_n_blocks_y)
+        
+#         start_block_x = block_from_pix(box[0][0], features_org.shape[1])
+#         start_block_y = block_from_pix(box[0][1], features_org.shape[0])
+#         end_block_x = start_block_x + sub_n_blocks_x 
+#         end_block_y = start_block_y + sub_n_blocks_x 
+  
+#         sub_hog = features_org[start_block_y:end_block_y, start_block_x:end_block_x,:,:,:]
+# #         print(sub_hog.shape)
+        
+#         pixels = sub_hog.ravel()
+#         cols = pixels.shape[0] / hog_length_64
+
+# #         print('Raveled sub hog: ', pixels.shape)
+# #         print('Number of new cols:', cols)
+        
+#         if (pixels.shape[0] % hog_length_64) > 0:
+# #             print('Need to make data divisble by {}} so adding 0s'.format(hog_length_64))
+#             needed = hog_length_64 * math.ceil(pixels.shape[0] / hog_length_64)
+#             extra_required = needed - pixels.shape[0] 
+#             pixels = np.hstack((pixels, np.zeros(extra_required)))
+# #             print('after adding 0s, shape is', pixels.shape)
+
+#         cols = pixels.shape[0] // hog_length_64
+        
+#         sub_pixels = pixels.reshape(-1, cols)
+#         box_hog = np.mean(sub_pixels, axis=1)
+        
+#         sub_hogs.append(box_hog)
+        
+#     return sub_hogs

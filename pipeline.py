@@ -8,6 +8,7 @@ from lesson_functions import *
 from pipeline_funcs import *
 from collections import deque
 import time
+import os
 
 def get_w_h(box):
     width = box[1][0] - box[0][0]
@@ -95,11 +96,12 @@ class VehicleIdentifier():
     def __init__(self):
         #self.fps = 25
         self.min_frames = 20
-        self.threshold = 10
+        self.threshold = 14
         self.frames_to_avg = self.min_frames
         self.heatmaps = deque(maxlen = self.frames_to_avg)
         self.cars = []
         self.max_miss_frames = 3
+        self.last_frame_no = 0
         
     def get_bounding_box(self, labels, car_no):
         mask = labels[0] == car_no
@@ -157,11 +159,13 @@ class VehicleIdentifier():
         box = (x1,y1),(x2,y2)
         return box
 
-    def figure_out_cars(self, boxes):
+    def figure_out_cars(self, output_img, boxes):
         summed_up = np.sum(self.heatmaps, axis=0)
+        print(np.max(summed_up))
+
         heatmap_threshold(summed_up, self.threshold)
             
-        cars_seen = np.array([False] * len(self.cars))
+        cars_seen = [False] * len(self.cars)
         
         labels = label(summed_up)
         for car_no in range(1, labels[1]+1):
@@ -173,6 +177,7 @@ class VehicleIdentifier():
                 debug('We have never seen this car # before. box:', car_box)
                 car = Vehicle(car_no)
                 self.cars.append(car)
+                cars_seen.append(True)
             else:
                 debug('Have seen this car before, it is car #', car.car_no)
                 cars_seen[car.car_no - 1] = True
@@ -201,7 +206,11 @@ class VehicleIdentifier():
                         cars_seen[i] = True
         
         # remove all cars that were not seen
-        self.cars = self.cars[cars_seen]
+        existing_cars = self.cars
+        self.cars = []
+        for i in range(len(cars_seen)):
+            if cars_seen[i]:
+                self.cars.append(existing_cars[i])
         
         #labels_img = draw_labeled_bboxes(output_img, labels)
         labels_img = self.color_labels(output_img, labels)
@@ -216,12 +225,12 @@ class VehicleIdentifier():
     def process_image(self, img):
         debug('Processing image, len(car)', len(self.cars))
         
-        #t1 = time.time()
+        t1 = time.time()
         #print(color_space_code)
         boxes = detect_cars(img)
-
-        #t2 = time.time()
-        #print('Time in detection', t2-t1)
+        t2 = time.time()
+        time_taken = t2 - t1
+        print('Time taken detection: {:.2f} secs', t2-t1)
 
         #print(boxes)
         heatmap = np.zeros(img.shape[:2], np.float)
@@ -243,15 +252,24 @@ class VehicleIdentifier():
         # wait till we have enough heat maps to average out
         if len(self.heatmaps) >= self.frames_to_avg:
             debug('Heatmap can be summed')
-            self.figure_out_cars(boxes)
+            self.figure_out_cars(output_img, boxes)
         else:
             cv2.putText(output_img, "Waiting for frames", (650, 60), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
 
         return output_img
 
-identifier = VehicleIdentifier()
+if os.path.exists('identifier.p'):
+    with open('identifier.p', 'rb') as f:
+        try:
+            identifier = pickle.load(f)
+        except EOFError as e:
+            print(e)
+            print('Loading a new identifier')
+            identifier = VehicleIdentifier()
+else:
+    identifier = VehicleIdentifier()
 
-for frame_no in range(0, 100):
+for frame_no in range(identifier.last_frame_no, 100):
     filename = './project_video-frames/{:04d}.jpg'.format(frame_no)
     
     # read RGB since thats what video will give us and then our function
@@ -261,10 +279,10 @@ for frame_no in range(0, 100):
     
     output_img = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
     cv2.imwrite('./frame-cars/{:04d}.jpg'.format(frame_no), output_img)
-    
+
+    with open('identifier.p', 'wb') as f:
+        pickle.dump(identifier, f)
     # print('Frame:', frame_no)
     # plt.imshow(output_img)
     # plt.show(block=False)
 
-with open('identifier.p', 'wb') as f:
-    pickle.dump(identifier)

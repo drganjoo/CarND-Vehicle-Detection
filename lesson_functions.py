@@ -10,7 +10,8 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block,
                                 pixels_per_cell=(pix_per_cell, pix_per_cell),
                                 cells_per_block=(cell_per_block, cell_per_block), 
                                 transform_sqrt=True, 
-                                visualise=vis, feature_vector=feature_vec,
+                                visualise=vis, 
+                                feature_vector=feature_vec,
                                 block_norm = 'L2-Hys')
     #return features, hog_image
     #return features
@@ -61,7 +62,8 @@ def extract_feature_image(feature_image, spatial_size=(32, 32),
                         pix_per_cell=8, cell_per_block=2, hog_channel=[0],
                         spatial_feat = True, 
                         hist_feat = True, 
-                        hog_feat = True):
+                        hog_feat = True,
+                        vis = False):
                         #laplacian_feat = True):
 
     file_features = []
@@ -69,6 +71,7 @@ def extract_feature_image(feature_image, spatial_size=(32, 32),
     if spatial_feat == True:
         spatial_features = bin_spatial(feature_image, size=spatial_size)
         file_features.append(spatial_features)
+    
     if hist_feat == True:
         # Apply color_hist()
         hist_features = color_hist(feature_image, nbins=hist_bins)
@@ -79,8 +82,11 @@ def extract_feature_image(feature_image, spatial_size=(32, 32),
         hog_features = []
         for channel in hog_channel:
             hog_features.append(get_hog_features(feature_image[:,:,channel], 
-                                orient, pix_per_cell, cell_per_block, 
-                                vis=False, feature_vec=True))
+                                orient, 
+                                pix_per_cell, 
+                                cell_per_block, 
+                                vis=vis, 
+                                feature_vec=True))
         hog_features = np.ravel(hog_features)        
         # Append the new feature vector to the features list
         file_features.append(hog_features)

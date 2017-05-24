@@ -13,6 +13,9 @@
 [notcar-hogs-8x4x12]:./output_images/notcar-hogs-8x4x12.png
 [notcar-hogs-16x4x12]:./output_images/notcar-hogs-16x4x12.png
 [window-shapes]:./output_images/window_shapes.png
+[sliding-window-hascar]:./output_images/sliding_window_hascar.png
+[false-detection]:./output_images/false_detection.png
+[heatmap]:./output_images/heatmap.png
 
 ## Training SVM
 
@@ -147,7 +150,7 @@ Ran LinearSVM for each of the above given parameters for three color spaces LUV,
 |spatial_size | (32,32)|
 |hist_bins | 32|
 
-Total feature size:  7968
+Total feature size:  **7968**
 
 #### Classifier Training
 
@@ -203,14 +206,30 @@ These are defined in [process.ipynb](process.ipynb) block labeled *Different Sli
 
 ![window-shapes]
 
-![alt text][image3]
+#### Car Detection
 
-####2. Show some examples of test images to demonstrate how your pipeline is working.  What did you do to optimize the performance of your classifier?
+I've used LAB color space and the features include, 32x32 spatially binned image, histogram of colors for all three channels and HOG of the L Channel.
 
-Ultimately I searched on two scales using YCrCb 3-channel HOG features plus spatially binned color and histograms of color in the feature vector, which provided a nice result.  Here are some example images:
+There are some false detections, mostly of yellow lane lines. To correct these, my foremost idea was to just include a lot of yellow lane lines as non-cars in the training set and retrain. This has helped a lot but still there are stages where a yellow lane is detected as car.
 
-![alt text][image4]
----
+#### Test Images with Car Detection
+
+The following image shows the three different window sizes at work on different test images, where each column shows the particular detection for that scale of window.
+
+![sliding-window-hascar]
+
+#### False Detections
+
+In order to inspect false detections in a frame / image, I wrote a block in [process.ipynb](process.ipynb) labelled *False Positives* where I show all detections in a given file/frame and a clsoeup (64x64) of the particular car. That paritcular close up is also saved to ./problems folder and then I can include that as part of training if needed.
+
+![false-detection]
+
+### Heatmap Test
+
+To figure out what the heatmap looks like for a given image, a block has been written in [process.ipynb](process.ipynb) labelled *'Heatmap Test'*, which clearly shows which windows found a car, what the heatmap was for the particular detection, what "label" detected as a car and finally the bounded box.
+
+![heatmap]
+
 
 ### Video Implementation
 

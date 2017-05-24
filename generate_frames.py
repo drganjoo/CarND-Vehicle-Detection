@@ -4,13 +4,6 @@ from moviepy.editor import VideoFileClip
 from glob import glob
 import shutil
 
-def mark_lanes_video(video_filename):
-    clip = VideoFileClip(video_filename)
-    video_with_lanes = clip.fl_image(process_image)
-    
-    output = os.path.splitext(video_filename)
-    video_with_lanes.write_videofile(output[0] + "-Lanes" + output[1], audio=False)
-    
 def mark_all_frames(video_filename):
     output = os.path.splitext(video_filename)
     output_folder = "{}-frames".format(output[0])
@@ -30,4 +23,4 @@ def mark_all_frames(video_filename):
         
     print("done")
 
-mark_all_frames('project_video.mp4')
+mark_all_frames('project_video-29-39.mp4')

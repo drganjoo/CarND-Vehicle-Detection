@@ -11,6 +11,12 @@ import matplotlib.pyplot as plt
 from lesson_functions import *
 from boxes import *
 
+if __name__ == "__main__":
+    with open('svm.p', 'rb') as f:
+        data = pickle.load(f)
+        print(data)
+    raise Exception('dont run this')
+
 svc = None
 X_train_scaler = None
 
@@ -32,6 +38,26 @@ with open('svm.p', 'rb') as f:
 print('Using Space Conversion: cv2.COLOR_RGB2' + color_space)
 color_space_code = eval('cv2.COLOR_RGB2' + color_space)
 
+def has_car(img_cs, box):
+    box_img = img_cs[box[0][1]:box[1][1], box[0][0]:box[1][0]]
+    box_img_64 = cv2.resize(box_img, (64,64))    
+
+    features = get_box_features(box_img_64)
+    return svc.predict(features)
+
+def get_box_features(box_img_64):
+    features = extract_feature_image(box_img_64,
+                            orient=orient, 
+                            pix_per_cell=pix_per_cell,
+                            cell_per_block=cell_per_block, hog_channel=hog_channel,
+                            spatial_feat = spatial_feat,
+                            hist_feat = hist_feat,
+                            spatial_size = spatial_size,
+                            hog_feat = hog_feat)
+    
+    #normalize features of the box using the same parameters as were used while training
+    return X_train_scaler.transform([np.ravel(features)])
+
 class CarDetector(threading.Thread):
     def __init__(self, img_cs, boxes, global_box_no):
         threading.Thread.__init__(self)
@@ -46,30 +72,16 @@ class CarDetector(threading.Thread):
             if has_car(self.img_cs, box):
                 self.car_boxes.append(box)
                 self.car_box_nos.append(self.global_box_no + box_no)
-
-def get_box_features(box_img_cs):
-    if box_img_cs.shape[0] != 64 or box_img_cs.shape[1] != 64:
-        raise Exception("Image has to be 64 x 64")
-        
-    features = extract_feature_image(box_img_cs, orient=orient, pix_per_cell=pix_per_cell,
-                               cell_per_block=cell_per_block, hog_channel=hog_channel,
-                               spatial_feat = spatial_feat,
-                               hist_feat = hist_feat,
-                               spatial_size = spatial_size,
-                               hog_feat = hog_feat)
     
-    # normalize features of the box using the same parameters as were used while training
-    return X_train_scaler.transform([np.ravel(features)])
+# def get_box_pixels(img, box):
+#     box_img = img[box[0][1]:box[1][1], box[0][0]:box[1][0]]
+#     box_img_64 = cv2.resize(box_img, (64,64))    
+#     return box_img_64
 
-def get_box_pixels(img, box):
-    box_img = img[box[0][1]:box[1][1], box[0][0]:box[1][0]]
-    box_img_64 = cv2.resize(box_img, (64,64))    
-    return box_img_64
-
-def has_car(img_cs, box):
-    box_img_64 = get_box_pixels(img_cs, box)
-    features = get_box_features(box_img_64)
-    return svc.predict(features)
+# def has_car(img_cs, box):
+#     box_img_64 = get_box_pixels(img_cs, box)
+#     features = self.get_box_features(box_img_64)
+#     return svc.predict(features)
 
 
 thread_boxes = []
@@ -82,7 +94,7 @@ def detect_cars(img, all_boxes = False):
         boxes = get_all_boxes(img_cs)
 
         thread_boxes = []
-        per_thread = len(boxes) // 1
+        per_thread = len(boxes) // 30
 
         for i in range(0, len(boxes), per_thread):
             if i + per_thread < len(boxes):
@@ -164,18 +176,28 @@ def draw_labeled_bboxes(img, labels):
     return labels_img
 
 def get_heat_img(img, heatmap):
-    hot_colors = [(90,0,0), (212,0,0), (255, 63, 0), (255,103,0), (255,225,0), (255,225,0), (255,225,0)]
+    hot_colors = [(0,0,0), (90,0,0), (212,0,0), (255, 63, 0), (255,103,0), (255,225,0), (255,225,0), (255,225,0)]
 
-    heat_clipped = np.clip(heatmap, 0, 255)
-    max_heat = np.max(heat_clipped)
-    if max_heat >= len(hot_colors):
-        heatmap = (heatmap / max_heat * len(hot_colors)).astype(np.int_)
+    heatmap = np.clip(heatmap, 0, 255)
+    max_heat = np.max(heatmap)
+    #print(max_heat)
+
+    cap = len(hot_colors) - 1
+
+    if max_heat >= cap:
+        # only change those colors which are > 0 
+        mask = heatmap > 0
+        heatmap[mask] = (heatmap[mask] / max_heat * cap + 1)
     
     heat_img = np.zeros(shape=(heatmap.shape[0], heatmap.shape[1], 3)).astype(np.uint8)
     
-    for index in range(0, len(hot_colors)):
-        locations = np.where(heatmap == index + 1)
-        heat_img[locations[0], locations[1]] = hot_colors[index]
+    for index in range(0, cap):
+        mask = (heatmap > index) & (heatmap <= index + 1)
+        locations = np.where(mask)
+
+        if locations[0].shape[0] > 0:
+            heat_img[locations[0], locations[1]] = hot_colors[index + 1]
+            #print('Setting locations: ', locations[0].shape, ' with color ', hot_colors[index + 1])
     
     return cv2.addWeighted(img, 0.4, heat_img, 0.6, 0)
     #return heat_img

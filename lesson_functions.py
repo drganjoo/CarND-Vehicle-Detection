@@ -2,122 +2,235 @@ import numpy as np
 import cv2
 from skimage.feature import hog
 
+# mainly copied from lesson #34 with some minor modifications 
+
 # Define a function to return HOG features and visualization
-def get_hog_features(img, orient, pix_per_cell, cell_per_block, 
+def get_hog_features(img_channel, orient, pix_per_cell, cell_per_block, 
                         vis=False, feature_vec=True):
     # Call with two outputs if vis==True
-    res = hog(img, orientations=orient, 
+    res = hog(img_channel, orientations=orient, 
                                 pixels_per_cell=(pix_per_cell, pix_per_cell),
                                 cells_per_block=(cell_per_block, cell_per_block), 
-                                transform_sqrt=True, 
+                                transform_sqrt=False, 
                                 visualise=vis, 
                                 feature_vector=feature_vec,
-                                block_norm = 'L2-Hys')
+                                block_norm = 'L1')
     #return features, hog_image
     #return features
     return res
 
-# def get_laplacian_hog(img, orient, pix_per_cell, cell_per_block, 
-#                         vis=False, 
-#                         feature_vec=True):
-    
-#     img = cv2.GaussianBlur(img, (3,3), 0)
-#     laplacian = cv2.Laplacian(img, cv2.CV_64F)
-
-#     hog_features = []    
-#     for channel in hog_channel:
-#         channel_features = hog(laplacian[:,:,channel], orientations=orient, 
-#                                 pixels_per_cell=(pix_per_cell, pix_per_cell),
-#                                 cells_per_block=(cell_per_block, cell_per_block), 
-#                                 transform_sqrt=False, 
-#                                 visualise=vis, 
-#                                 feature_vector=feature_vec,
-#                                 block_norm='L2-Hys')
-#         hog_features.append(channel_features)
-
-#     #return features, hog_image
-#     #return features
-#     return np.ravel(hog_features)
+# def get_hog_features(img, orient, pix_per_cell, cell_per_block, 
+#                         vis=False, feature_vec=True):
+#     # Call with two outputs if vis==True
+#     if vis == True:
+#         features, hog_image = hog(img, orientations=orient, 
+#                                   pixels_per_cell=(pix_per_cell, pix_per_cell),
+#                                   cells_per_block=(cell_per_block, cell_per_block), 
+#                                   transform_sqrt=False, 
+#                                   visualise=vis, feature_vector=feature_vec)
+#         return features, hog_image
+#     # Otherwise call with one output
+#     else:      
+#         features = hog(img, orientations=orient, 
+#                        pixels_per_cell=(pix_per_cell, pix_per_cell),
+#                        cells_per_block=(cell_per_block, cell_per_block), 
+#                        transform_sqrt=False, 
+#                        visualise=vis, feature_vector=feature_vec)
+#         return features
 
 # Define a function to compute binned color features  
 def bin_spatial(img, size=(32, 32)):
-    # Use cv2.resize().ravel() to create the feature vector
-    features = cv2.resize(img, size).ravel() 
-    # Return the feature vector
-    return features
+    color1 = cv2.resize(img[:,:,0], size).ravel()
+    color2 = cv2.resize(img[:,:,1], size).ravel()
+    color3 = cv2.resize(img[:,:,2], size).ravel()
+    return np.hstack((color1, color2, color3))
 
-# Define a function to compute color histogram features 
-def color_hist(img, nbins=32, bins_range=(0, 256)):
+def color_hist(img, nbins=32):    #bins_range=(0, 256)
     # Compute the histogram of the color channels separately
-    channel1_hist = np.histogram(img[:,:,0], bins=nbins, range=bins_range)
-    channel2_hist = np.histogram(img[:,:,1], bins=nbins, range=bins_range)
-    channel3_hist = np.histogram(img[:,:,2], bins=nbins, range=bins_range)
+    channel1_hist = np.histogram(img[:,:,0], bins=nbins)
+    channel2_hist = np.histogram(img[:,:,1], bins=nbins)
+    channel3_hist = np.histogram(img[:,:,2], bins=nbins)
     # Concatenate the histograms into a single feature vector
     hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
     # Return the individual histograms, bin_centers and feature vector
     return hist_features
 
-def extract_feature_image(feature_image, spatial_size=(32, 32),
+# Define a function to extract features from a single image window
+# This function is very similar to extract_features()
+# just for a single image rather than list of images
+def single_img_features(colrospaced_image, 
+                        spatial_size=(32, 32),
                         hist_bins=32, orient=9, 
-                        pix_per_cell=8, cell_per_block=2, hog_channel=[0],
-                        spatial_feat = True, 
-                        hist_feat = True, 
-                        hog_feat = True,
-                        vis = False):
-                        #laplacian_feat = True):
-
-    file_features = []
-
+                        pix_per_cell=8, cell_per_block=2,
+                        hog_channel='ALL',
+                        spatial_feat=True,
+                        hist_feat=True, 
+                        hog_feat=True,
+                        vis=False):
+    #1) Define an empty list to receive features
+    img_features = []
+    #3) Compute spatial features if flag is set
     if spatial_feat == True:
-        spatial_features = bin_spatial(feature_image, size=spatial_size)
-        file_features.append(spatial_features)
-    
+        spatial_features = bin_spatial(colrospaced_image, size=spatial_size)
+        #4) Append features to list
+        img_features.append(spatial_features)
+    #5) Compute histogram features if flag is set
     if hist_feat == True:
-        # Apply color_hist()
-        hist_features = color_hist(feature_image, nbins=hist_bins)
-        file_features.append(hist_features)
-
+        hist_features = color_hist(colrospaced_image, nbins=hist_bins)
+        #6) Append features to list
+        img_features.append(hist_features)
+    #7) Compute HOG features if flag is set
     if hog_feat == True:
-    # Call get_hog_features() with vis=False, feature_vec=True
-        hog_features = []
-        for channel in hog_channel:
-            hog_features.append(get_hog_features(feature_image[:,:,channel], 
-                                orient, 
-                                pix_per_cell, 
-                                cell_per_block, 
-                                vis=vis, 
-                                feature_vec=True))
-        hog_features = np.ravel(hog_features)        
-        # Append the new feature vector to the features list
-        file_features.append(hog_features)
-    
-    # if laplacian_feat == True:
-    #     lap_hog = get_laplacian_hog(feature_image, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
-    #     file_features.append(lap_hog)
+        if hog_channel == 'ALL':
+            channels = range(colrospaced_image.shape[2])
+        else:
+            channels = [hog_channel]
 
-    return np.concatenate(file_features)
+        hog_features = []
+
+        if not vis:
+            for channel in channels:
+                hog_features.extend(get_hog_features(colrospaced_image[:,:,channel], 
+                                    orient, pix_per_cell, cell_per_block, 
+                                    vis=False, 
+                                    feature_vec=True))
+        else:
+            hog_c_images = []
+            for channel in channels:
+                hog_channel_features, hog_img = get_hog_features(colrospaced_image[:,:,channel], 
+                                    orient, pix_per_cell, cell_per_block, 
+                                    vis=True, 
+                                    feature_vec=True)
+                hog_features.extend(hog_channel_features)
+                hog_c_images.append(hog_img)
+            
+            if hog_channel == 'ALL':
+                hog_images = np.stack(hog_c_images, axis=2)
+            else:
+                hog_image = hog_c_images[0]
+
+        #8) Append features to list
+        img_features.append(hog_features)
+
+    #9) Return concatenated array of features
+    combined_features = np.concatenate(img_features)
+    if vis:
+        return combined_features, hog_images
+    else:
+        return combined_features
+
+# Define a function you will pass an image 
+# and the list of windows to be searched (output of slide_windows())
+def search_windows(colorspaced_image, windows, clf, scaler,  
+                    spatial_size=(32, 32), hist_bins=32, 
+                    hist_range=(0, 256), orient=9, 
+                    pix_per_cell=8, cell_per_block=2, 
+                    hog_channel='ALL', spatial_feat=True, 
+                    hist_feat=True, hog_feat=True):
+
+    #1) Create an empty list to receive positive detection windows
+    on_windows = []
+    #2) Iterate over all windows in the list
+    for window in windows:
+        #3) Extract the test window from original image
+        test_img = cv2.resize(colorspaced_image[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))      
+        #4) Extract features for that window using single_img_features()
+        features = single_img_features(colorspaced_image,
+                            spatial_size=spatial_size, hist_bins=hist_bins, 
+                            orient=orient, pix_per_cell=pix_per_cell, 
+                            cell_per_block=cell_per_block, 
+                            hog_channel=hog_channel, spatial_feat=spatial_feat, 
+                            hist_feat=hist_feat, hog_feat=hog_feat)
+        #5) Scale extracted features to be fed to classifier
+        test_features = scaler.transform(np.array(features).reshape(1, -1))
+        #6) Predict using your classifier
+        prediction = clf.predict(test_features)
+        #7) If positive (prediction == 1) then save the window
+        if prediction == 1:
+            on_windows.append(window)
+    #8) Return windows for positive detections
+    return on_windows
+        
+# def extract_feature_image(feature_image, spatial_size=(32, 32),
+#                         hist_bins=32, orient=9, 
+#                         pix_per_cell=8, cell_per_block=2, hog_channel=[0],
+#                         spatial_feat = True, 
+#                         hist_feat = True, 
+#                         hog_feat = True,
+#                         vis = False):
+#                         #laplacian_feat = True):
+
+#     file_features = []
+
+#     if spatial_feat == True:
+#         spatial_features = bin_spatial(feature_image, size=spatial_size)
+#         file_features.append(spatial_features)
     
+#     if hist_feat == True:
+#         # Apply color_hist()
+#         hist_features = color_hist(feature_image, nbins=hist_bins)
+#         file_features.append(hist_features)
+
+#     if hog_feat == True:
+#     # Call get_hog_features() with vis=False, feature_vec=True
+#         hog_features = []
+#         for channel in hog_channel:
+#             hog_features.append(get_hog_features(feature_image[:,:,channel], 
+#                                 orient, 
+#                                 pix_per_cell, 
+#                                 cell_per_block, 
+#                                 vis=vis, 
+#                                 feature_vec=True))
+#         hog_features = np.ravel(hog_features)        
+#         # Append the new feature vector to the features list
+#         file_features.append(hog_features)
+    
+#     # if laplacian_feat == True:
+#     #     lap_hog = get_laplacian_hog(feature_image, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+#     #     file_features.append(lap_hog)
+
+#     return np.concatenate(file_features)
+
+
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
-def extract_features(imgs, color_space='RGB', spatial_size=(32, 32),
+def extract_features(img_filenames, color_space='RGB', spatial_size=(32, 32),
                         hist_bins=32, orient=9, 
-                        pix_per_cell=8, cell_per_block=2, hog_channel=[0],
+                        pix_per_cell=8, cell_per_block=2, hog_channel=0,
                         spatial_feat=True, hist_feat=True, hog_feat=True):
-                        # laplacian_feat = True):
     # Create a list to append feature vectors to
     features = []
     # Iterate through the list of images
-    for file in imgs:
-        # Read in each one by one
+    for file in img_filenames:
+        file_features = []
         feature_image = load_image(file, color_space)
-        file_features = extract_feature_image(feature_image, spatial_size=spatial_size,
-                            hist_bins = hist_bins, orient=orient, pix_per_cell = pix_per_cell,
-                            cell_per_block=cell_per_block, hog_channel = hog_channel,
-                            spatial_feat = spatial_feat, hist_feat = hist_feat, hog_feat = hog_feat) #laplacian_feat = laplacian_feat)
-        features.append(file_features)
+
+        if spatial_feat == True:
+            spatial_features = bin_spatial(feature_image, size=spatial_size)
+            file_features.append(spatial_features)
+        if hist_feat == True:
+            # Apply color_hist()
+            hist_features = color_hist(feature_image, nbins=hist_bins)
+            file_features.append(hist_features)
+        if hog_feat == True:
+        # Call get_hog_features() with vis=False, feature_vec=True
+            if hog_channel == 'ALL':
+                hog_features = []
+                for channel in range(feature_image.shape[2]):
+                    hog_features.append(get_hog_features(feature_image[:,:,channel], 
+                                        orient, pix_per_cell, cell_per_block, 
+                                        vis=False, feature_vec=True))
+                hog_features = np.ravel(hog_features)        
+            else:
+                hog_features = get_hog_features(feature_image[:,:,hog_channel], orient, 
+                            pix_per_cell, cell_per_block, vis=False, feature_vec=True)
+            # Append the new feature vector to the features list
+            file_features.append(hog_features)
+        features.append(np.concatenate(file_features))
     # Return list of feature vectors
     return features
+    
     
 # Define a function that takes an image,
 # start and stop positions in both x and y, 
@@ -181,9 +294,3 @@ def load_image(file, color_space):
     img = cv2.imread(file)
     space = eval('cv2.COLOR_BGR2' + color_space)
     return cv2.cvtColor(img, space)
-
-# def laplacian_features(channel):
-#     img = cv2.GaussianBlur(channel, (3,3), 0)
-#     img_32 = cv2.resize(img, (32,32))
-#     laplacian_32 = cv2.Laplacian(img_32, cv2.CV_64F)
-#     return laplacian_32.ravel()

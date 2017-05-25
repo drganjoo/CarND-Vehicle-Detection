@@ -15,20 +15,28 @@
 [window-shapes]:./output_images/window_shapes.png
 [sliding-window-hascar]:./output_images/sliding_window_hascar.png
 [false-detection]:./output_images/false_detection.png
-[heatmap]:./output_images/heatmap.png
+[heatmap]:./output_images/heatmap.jpg
+[sample-missframe]:./output_images/0595.jpg
+
+## Project Video 
+
+Project video is available at [./project-video-cars.mp4](./project-video-cars.mp4)
 
 ## Training SVM
 
-Overall solution has been coded in two jupyter notebooks:
+Overall solution's training part has been coded in jupyter notebook and the processing pipeline as been coded as python files:
 
 [VehicleDetection-Training](training.ipynb)  
-[VehicleDetection-Process](process.ipynb)
+[pipeline.py](pipeline.py)  
+[pipeline_funcs.py](pipeline_functions.py)
 
 ### Data Used
 
 Mostly used GTI and KITTI car / not-car images that were given as part of [vehicles.zip](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/vehicles.zip) and [non-vehicles.zip](https://s3.amazonaws.com/udacity-sdc/Vehicle_Tracking/non-vehicles.zip)
 
 During testing a lot of times the yellow lane line was being misclassified as a car, therefore I generated a number of smaller 64x64 images from the first 100 frames of the video, which had no car visible and used them as part of non-vehicles set.
+
+I tried using the udacity's labeled data set [Udacity Labeled Dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) but was surprised to see that it had major issues. A lot of frames' bounding box is not correct. Hence in the end I did not use that. [extract_udacity.ipynb](extract_udacity.ipynb)
 
 ### Data Distribution
 
@@ -208,58 +216,85 @@ These are defined in [process.ipynb](process.ipynb) block labeled *Different Sli
 
 #### Car Detection
 
-I've used LAB color space and the features include, 32x32 spatially binned image, histogram of colors for all three channels and HOG of the L Channel.
+I've used LAB color space and the features include, 32x32 spatially binned image, color histogram and HOG of all channels.
 
-There are some false detections, mostly of yellow lane lines. To correct these, my foremost idea was to just include a lot of yellow lane lines as non-cars in the training set and retrain. This has helped a lot but still there are stages where a yellow lane is detected as car.
+There are a lot of false detections specially on the left hand side railing. To correct these, my foremost idea was to just include a lot of yellow lane lines and road railings as part of non-cars in the training set and retrain. This has helped somewhat but still a lot of times road railings are idenitifed as cars.
 
+A class has been written *VehicleIdentifier* [pipeline.py](pipeline.py) Line #: 97, that takes the image and processes it. Each frame's heat map is summed up and thresholded. After thresholding another class *Vehicle* (Line # 29)  is created for all vehicles identified.
+
+A low pass filter has been implemented that expands / moves the bounding box of each vehicle based on the last bounding box's center and the current bounding box's center (Line # 76) But I am not happy with the end result as the car is not completely enclosed
+
+```
+            new_width = old_width * (1 - self.alpha) + width * self.alpha
+            new_height = old_height * (1 - self.alpha) + height * self.alpha
+
+            self.center = self.center * (1 - self.center_alpha) + center * self.center_alpha
+```
+
+Sometimes the detection goes off a little and the heat map marks the visible car as not ok any more. For such frames, have implemented the logic that each identified car has a chance of 10 miss frames during, which I check if there was a bounding box in the same region, regardless of whether the heatmap was hot enough or not, the bounding box is still considered as good. Line # 213 of pipeline.py has this code.
+
+![sample-missframe]
 #### Test Images with Car Detection
 
-The following image shows the three different window sizes at work on different test images, where each column shows the particular detection for that scale of window.
+The following image shows the different window sizes at work on different test images, where each column shows the particular detection for that scale of window.
 
 ![sliding-window-hascar]
 
 #### False Detections
 
-In order to inspect false detections in a frame / image, I wrote a block in [process.ipynb](process.ipynb) labelled *False Positives* where I show all detections in a given file/frame and a clsoeup (64x64) of the particular car. That paritcular close up is also saved to ./problems folder and then I can include that as part of training if needed.
+In order to inspect false detections in a frame / image, I wrote a block in [process.ipynb](process.ipynb) labelled *False Positives* where I show all detections in a given file/frame and a clsoeup (64x64) of the particular car. That paritcular close up is also saved to ./problems folder so that if the need be I can include that as part of training if needed.
 
 ![false-detection]
 
-### Heatmap Test
+### Heatmap
 
-To figure out what the heatmap looks like for a given image, a block has been written in [process.ipynb](process.ipynb) labelled *'Heatmap Test'*, which clearly shows which windows found a car, what the heatmap was for the particular detection, what "label" detected as a car and finally the bounded box.
+Each frame being processed has four smaller images shown on top:
+
+1. Left most shows the idenitifications within this frame
+2. Next one shows the heat map for the current frame
+3. 3rd one shows the heat map summed up and thresholded
+4. Shows the classes identified as well as the number of cars detected
 
 ![heatmap]
 
+## Process Speedup
 
-### Video Implementation
+The process was so slow that I ended up cutting down to pix_per_cell = 16, cells_per_block = 2 and orient = 12. 
 
-####1. Provide a link to your final video output.  Your pipeline should perform reasonably well on the entire project video (somewhat wobbly or unstable bounding boxes are ok as long as you are identifying the vehicles most of the time with minimal false positives.)
-Here's a [link to my video result](./project_video.mp4)
+Then I wrote code that creates 20 threads and about 124 boxes are distributed amongst the 20 threads to look for cars within the thread. This is coded in [pipeline_funcs.py](pipeline_funcs.py) line # 38 *class CarDetector*.
 
 
-####2. Describe how (and identify where in your code) you implemented some kind of filter for false positives and some method for combining overlapping bounding boxes.
+## Video Implementation
 
-I recorded the positions of positive detections in each frame of the video.  From the positive detections I created a heatmap and then thresholded that map to identify vehicle positions.  I then used `scipy.ndimage.measurements.label()` to identify individual blobs in the heatmap.  I then assumed each blob corresponded to a vehicle.  I constructed bounding boxes to cover the area of each blob detected.  
+Project video is available at [./project-video-cars.mp4](./project-video-cars.mp4)
 
-Here's an example result showing the heatmap from a series of frames of video, the result of `scipy.ndimage.measurements.label()` and the bounding boxes then overlaid on the last frame of video:
+#### False Identifications
+
 
 ### Here are six frames and their corresponding heatmaps:
 
-![alt text][image5]
 
-### Here is the output of `scipy.ndimage.measurements.label()` on the integrated heatmap from all six frames:
-![alt text][image6]
+### Discussion
 
-### Here the resulting bounding boxes are drawn onto the last frame in the series:
-![alt text][image7]
+#### Data Training
 
+1) I am not at all happy with the false detections. Left hand side road railing is detected as a car a lot
+2) Personally, I think a deep convolution network would be a far better at prediction than HOG. Would like to transfer learning from ImageNet may be and extract features out of that and use those for SVM.
 
+#### Boxes
 
----
+1) I am not at all happy with the bounding algorithm used. Right now it just considers all of the boxes that are in the heat map and the bigger box towards the bottom frame just makes the box more elongated. Maybe would later on implement a dynamic box that expands (or contracts) to come up with a best fit window.
 
-###Discussion
+2) The low pass filter implemented for bounding box update is not that great. Would like to update this with a kalman filter.
 
-####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
+3) Had implemented a rudementary algorithm to detect the speed of the vehicle so that in case if it is not detected I can at least try to estimate and then resample that particular area may be. But the routine that I had written (Line # 102) ruins the estimate.
 
-Here I'll talk about the approach I took, what techniques I used, what worked and why, where the pipeline might fail and how I might improve it if I were going to pursue this project further.  
+#### Faster Process
 
+The process is still very slow at 0.5 secs / frame. Would like to increase this.
+
+#### Hog Subsampling
+
+In order to speed up the process, tried implementing Hog Subsampling using a different approach than the one proposed in the class lectures. 
+
+Created the hog of the 1280x700 image, extracted hog blocks for the whole of the sliding window being searched for, which would result in much more number of pixels than the 64x64 image that we trained on therefore after sampling reshaped the pixels of the block so that I have the same number of rows as the original 64x64's pixel and then took the mean of each row. But in the end didnot use this since as is I was getting bad detections. The code has been written in 

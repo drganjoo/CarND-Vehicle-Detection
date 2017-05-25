@@ -318,7 +318,8 @@ class VehicleIdentifier():
         return box
 
     def figure_out_cars(self, boxes):
-        self.combined_heatmap = np.sum(self.heatmaps, axis=0)
+        #self.combined_heatmap = np.sum(self.heatmaps, axis=0)
+        self.combined_heatmap = np.average(self.heatmaps, axis=0)
         self.combined_heatmap_nonthreshold = np.copy(self.combined_heatmap)
 
         #print(np.max(summed_up))
@@ -336,6 +337,9 @@ class VehicleIdentifier():
             
             if car is None:
                 print('We have never seen this car # before. box:', car_box)
+
+                # check how close are we to another car, may be its a  false
+                # bounding box from labels
                 car = Vehicle(car_no)
                 
                 self.cars.append(car)

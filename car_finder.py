@@ -318,8 +318,8 @@ class VehicleIdentifier():
         return box
 
     def figure_out_cars(self, boxes):
-        #self.combined_heatmap = np.sum(self.heatmaps, axis=0)
-        self.combined_heatmap = np.average(self.heatmaps, axis=0)
+        self.combined_heatmap = np.sum(self.heatmaps, axis=0)
+        #self.combined_heatmap = np.average(self.heatmaps, axis=0)
         self.combined_heatmap_nonthreshold = np.copy(self.combined_heatmap)
 
         #print(np.max(summed_up))
@@ -339,7 +339,9 @@ class VehicleIdentifier():
                 print('We have never seen this car # before. box:', car_box)
 
                 # check how close are we to another car, may be its a  false
-                # bounding box from labels
+                # bounding box from labels, we will add it to the possible cars array
+                # and will see if it is still there after some frames or not
+
                 car = Vehicle(car_no)
                 
                 self.cars.append(car)
@@ -511,7 +513,7 @@ else:
     identifier = VehicleIdentifier()
     print('New identifier created')
 
-for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 100):
+for identifier.last_frame_no in range(identifier.last_frame_no + 1, 708):
     filename = './project_video-frames/{:04d}.jpg'.format(identifier.last_frame_no)
     
     # read RGB since thats what video will give us and then our function

@@ -14,7 +14,7 @@
 [heatmap]:./output_images/heatmap.jpg
 [sample-missframe]:./output_images/0595.jpg
 [sample-frame]: ./output_images/sample_frame.jpg
-[combined-hogs]: ./output_images/combined_hogs.png
+[combined-hogs]: ./output_images/combined-hogs.png
 [various-options]: ./output_images/various-options.png
 [false-got-through]: ./output_images/false-got-through.jpg
 [good-false]: ./output_images/good-false.jpg

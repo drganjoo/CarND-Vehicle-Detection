@@ -6,7 +6,7 @@ from windows import *
 from collections import deque
 from scipy.ndimage.measurements import label
 
-
+# colors used for different bounding boxes for each car and for the label's image shown on right
 colors = [(255,0,0), (0,255,0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255,255,255),
             (255, 0, 255), (255, 150, 0), (255, 0, 150), (150, 75, 0), (150, 0, 75)]
         
@@ -256,8 +256,10 @@ class Vehicle():
                                  min(int(self.center[1] + height // 2), 720)))
         return bounding_box
             
+
+            
 class VehicleIdentifier():
-    def __init__(self, params_for_feature):
+    def __init__(self, params_for_feature, svc, X_scaler):
         self.min_frames = 20
         self.frames_to_avg = 10
         self.heatmaps = deque(maxlen = self.frames_to_avg)
@@ -472,15 +474,16 @@ class VehicleIdentifier():
                 
                 # there should be at least 5  frames that the car is visible for and
                 # it should be visible at least in 50% of the last frames
-                if (car.frame_count > FRAME_COUNT_MAYBE_CARS) and (car.frame_count / no_of_frames_passed > 0.5):
-                    w,h = get_w_h(car_box)
-                    if (w > 20) and (h > 20):
-                        self.cars.add(car)
-                        cars_moved.add(car)
-                        print('Remove from maybe cars and adding it to the active car list')
-                        self.maybe_cars.remove(car)
-                    else:
-                        print('Too small to be a car')
+                if no_of_frames_passed > 0:
+                    if (car.frame_count > FRAME_COUNT_MAYBE_CARS) and (car.frame_count / no_of_frames_passed > 0.5):
+                        w,h = get_w_h(car_box)
+                        if (w > 20) and (h > 20):
+                            self.cars.add(car)
+                            cars_moved.add(car)
+                            print('Remove from maybe cars and adding it to the active car list')
+                            self.maybe_cars.remove(car)
+                        else:
+                            print('Too small to be a car')
 
         return cars_moved
 
@@ -715,10 +718,10 @@ if __name__ == '__main__':
             except EOFError as e:
                 print(e)
                 print('Loading a new identifier')
-                identifier = VehicleIdentifier(params)
+                identifier = VehicleIdentifier(params, svc, X_scaler)
                 identifier.threshold = 20
     else:
-        identifier = VehicleIdentifier(params)
+        identifier = VehicleIdentifier(params, svc, X_scaler)
         print('New identifier created')
 
     #for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 400):

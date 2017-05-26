@@ -30,7 +30,8 @@ Project video is available at [./project_video_cars.mp4](./project_video_cars.mp
 The training part has been coded in a jupyter notebook, where as vehicle identification pipeline has been coded as python files.
 
 [VehicleDetection-Training](training.ipynb)  
-[Exploration](exploration.ipynb)  
+[Exploration](exploration.ipynb)
+[process]  (process.ipynb) ** playing around with window sizes / detection **
 [car_finder.py](car_finder.py)  
 
 ### Data Used For Training

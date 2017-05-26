@@ -14,7 +14,7 @@
 [heatmap]:./output_images/heatmap.jpg
 [sample-missframe]:./output_images/0595.jpg
 [sample-frame]: ./output_images/sample_frame.jpg
-[combined-hogs]: ./output_images/combined_hogs.jpg
+[combined-hogs]: ./output_images/combined_hogs.png
 [various-options]: ./output_images/various-options.png
 [false-got-through]: ./output_images/false-got-through.jpg
 [good-false]: ./output_images/good-false.jpg
@@ -58,7 +58,7 @@ Initially a lot of yellow lane lines were being wrongly identified as cars, ther
 
 Explored, LUV, LAB, RGB, YUV and YCrCb color spaces.
 
-Initially I checked out various color spaces visually to see, which ones were clearly indicating a car. For this I wrote [exploration.ipynb](exploration.ipynb) that would randomly pick up 5 car and 5 non-car samples, convert them to a particular color space and would display their individual channels on screen (Code block # 2 of [training]). 
+Initially I checked out various color spaces visually to see, which ones were clearly indicating a car. For this I wrote [exploration.ipynb](exploration.ipynb) that would randomly pick up 5 car and 5 non-car samples, convert them to a particular color space and would display their individual channels on screen (Code block # 2). 
 
 ![cars-lab]
 ![notcars-lab]

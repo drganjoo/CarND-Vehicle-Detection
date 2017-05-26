@@ -30,8 +30,8 @@ Project video is available at [./project_video_cars.mp4](./project_video_cars.mp
 The training part has been coded in a jupyter notebook, where as vehicle identification pipeline has been coded as python files.
 
 [VehicleDetection-Training](training.ipynb)  
-[Exploration](exploration.ipynb)
-[process]  (process.ipynb) ** playing around with window sizes / detection **
+[Exploration](exploration.ipynb)  
+[process](process.ipynb) ** playing around with window sizes / detection **  
 [car_finder.py](car_finder.py)  
 
 ### Data Used For Training
@@ -40,7 +40,7 @@ Mostly used GTI and KITTI car / not-car images that were given as part of [vehic
 
 During testing a lot of times the yellow lane line was being misclassified as a car, therefore I generated a number of smaller 64x64 images from the first 100 frames of the video, which had no car visible and used them as part of non-vehicles set.
 
-I tried using the udacity's labeled data set [Udacity Labeled Dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) but at that point I didn't know the column headings were wrong and I could hardly get the correct car frames out of it, so didn't use it at that point. [extract_udacity.ipynb](extract_udacity.ipynb) I later found out that the correct column labels were x_min, x_max, y_min and y_max
+I tried using the udacity's labeled data set [Udacity Labeled Dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) but at that point I didn't know the column headings were wrong and I could hardly get the correct car frames out of it, so didn't use it at that point. [extract_udacity.ipynb](extract_udacity.ipynb) I later found out that the correct column labels were x_min, x_max, y_min and y_max but for it to be used I would have had to generate almost equal number of non car images.
 
 ### Data Distribution
 

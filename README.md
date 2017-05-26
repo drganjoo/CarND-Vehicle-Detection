@@ -18,7 +18,7 @@
 [various-options]: ./output_images/various-options.png
 [false-got-through]: ./output_images/false-got-through.jpg
 [good-false]: ./output_images/good-false.jpg
-[bad-label]: ./output_images/bad_label.jpg
+[bad-label]: ./output_images/bad-label.jpg
 
 The project has been broken down into two parts, one is training the SVM and the other is processing the video / identifying cars.
 ## Project Video 
@@ -212,8 +212,8 @@ In order to inspect false detections in a frame / image, I wrote a block in [pro
 
 Each frame being processed has four smaller images shown on top:
 
-1. Left most shows the idenitifications within this frame
-2. Next one shows the heat map for the current frame
+1. Left most shows windows that have been predicted to have a car and the heat map for the frame
+2. Next one shows the heat map summed up without thresholding
 3. 3rd one shows the heat map summed up and thresholded
 4. Shows the classes identified as well as the number of cars detected
 
@@ -242,7 +242,7 @@ Label not correctly telling us about 2 cars:
 
 ![bad_label]
 
-### Discussion
+# Discussion
 
 #### Data Training
 
@@ -252,11 +252,15 @@ Label not correctly telling us about 2 cars:
 
 #### Boxes
 
-1) I am not at all happy with the bounding algorithm used. Right now it just considers all of the boxes that are in the heat map and the bigger box towards the bottom frame just makes the box more elongated. Maybe would later on implement a dynamic box that expands (or contracts) to come up with a best fit window.
+1) I am not at all happy with the bounding algorithm used. Label, combines two blocks of cars, where as they have a clear center in the heat map.
+
+![bad-label]
 
 2) The low pass filter implemented for bounding box update is not that great. Would like to update this as well as other estimator with a kalman filter.
 
 3) Towards the end of the video, the algorithm finds three cars as it keeps on thinking that the box for the black car has two cars in it. It is a very reduamentary algorithm and definitely needs to be worked upon for better car detection.
+
+4) Thresholding: I just sum up the last 10 frames' heatmap. Some times when the oldest heatmap goes out of the deque, it so happens that it had a lot of numbers so all of a sudden there is a big change in the thresholded heatmap.
 
 #### Faster Process
 

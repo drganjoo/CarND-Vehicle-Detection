@@ -31,6 +31,7 @@ The training part has been coded in a jupyter notebook, where as vehicle identif
 
 [VehicleDetection-Training](training.ipynb)  
 [Exploration](exploration.ipynb)  
+[process](process.ipynb) ** playing around with window sizes / detection **  
 [car_finder.py](car_finder.py)  
 
 ### Data Used For Training
@@ -39,7 +40,7 @@ Mostly used GTI and KITTI car / not-car images that were given as part of [vehic
 
 During testing a lot of times the yellow lane line was being misclassified as a car, therefore I generated a number of smaller 64x64 images from the first 100 frames of the video, which had no car visible and used them as part of non-vehicles set.
 
-I tried using the udacity's labeled data set [Udacity Labeled Dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) but at that point I didn't know the column headings were wrong and I could hardly get the correct car frames out of it, so didn't use it at that point. [extract_udacity.ipynb](extract_udacity.ipynb) I later found out that the correct column labels were x_min, x_max, y_min and y_max
+I tried using the udacity's labeled data set [Udacity Labeled Dataset](https://github.com/udacity/self-driving-car/tree/master/annotations) but at that point I didn't know the column headings were wrong and I could hardly get the correct car frames out of it, so didn't use it at that point. [extract_udacity.ipynb](extract_udacity.ipynb) I later found out that the correct column labels were x_min, x_max, y_min and y_max but for it to be used I would have had to generate almost equal number of non car images.
 
 ### Data Distribution
 
@@ -55,7 +56,7 @@ Initially a lot of yellow lane lines were being wrongly identified as cars, ther
 
 #### Color Spaces Exploration
 
-Explored, LUV, LAB, RGB and YCrCb color spaces.
+Explored, LUV, LAB, RGB, YUV and YCrCb color spaces.
 
 Initially I checked out various color spaces visually to see, which ones were clearly indicating a car. For this I wrote [exploration.ipynb](exploration.ipynb) that would randomly pick up 5 car and 5 non-car samples, convert them to a particular color space and would display their individual channels on screen (Code block # 2 of [training]). 
 
@@ -251,9 +252,9 @@ Label not correctly telling us about 2 cars:
 
 1) I am not at all happy with the bounding algorithm used. Right now it just considers all of the boxes that are in the heat map and the bigger box towards the bottom frame just makes the box more elongated. Maybe would later on implement a dynamic box that expands (or contracts) to come up with a best fit window.
 
-2) The low pass filter implemented for bounding box update is not that great. Would like to update this with a kalman filter.
+2) The low pass filter implemented for bounding box update is not that great. Would like to update this as well as other estimator with a kalman filter.
 
-3) The overall algorithm for keeping track of each car's estimates requires a lot to be done. May be a kalman filter can be used here.
+3) Towards the end of the video, the algorithm finds three cars as it keeps on thinking that the box for the black car has two cars in it. It is a very reduamentary algorithm and definitely needs to be worked upon for better car detection.
 
 #### Faster Process
 
@@ -261,5 +262,5 @@ The process is still very slow at 0.5 secs / frame. Would like to increase this.
 
 #### Z Space
 
-There is no concept of the third dimension. Somehow would like to keep track of how deep a vehicle is from other vehicles to better detect overlaps
+There is no concept of depth in the code. If somehow I can tell, which car is behind, may be that can be used to better tell when an overlap occurs.
 

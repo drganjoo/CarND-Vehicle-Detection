@@ -56,7 +56,7 @@ Initially a lot of yellow lane lines were being wrongly identified as cars, ther
 
 #### Color Spaces Exploration
 
-Explored, LUV, LAB, RGB and YCrCb color spaces.
+Explored, LUV, LAB, RGB, YUV and YCrCb color spaces.
 
 Initially I checked out various color spaces visually to see, which ones were clearly indicating a car. For this I wrote [exploration.ipynb](exploration.ipynb) that would randomly pick up 5 car and 5 non-car samples, convert them to a particular color space and would display their individual channels on screen (Code block # 2 of [training]). 
 

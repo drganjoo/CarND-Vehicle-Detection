@@ -6,6 +6,8 @@ from windows import *
 from collections import deque
 from scipy.ndimage.measurements import label
 
+SAVE_SVM_ONLY = 1
+
 with open('svm-yuv-16x2x11.p', 'rb') as f:
     data = pickle.load(f)
     svc = data['svm']
@@ -121,16 +123,20 @@ class SingleFrameCarFinder():
     def predict_cars(self, img_cs):
         self.init_for_frame(img_cs)
         
-        window_features = self.find_features(img_cs)
-        
-        self.car_windows = []
-        for index, window in enumerate(window_features):
-             if self.car_exists(window):
-                self.car_windows.append(self.windows[index])
-        
+        self.car_windows = self.get_car_windows(img_cs)        
         self.add_heat(self.car_windows)
         return self.car_windows
+
+    def get_car_windows(self, img_cs):
+        window_features = self.find_features(img_cs)
         
+        car_windows = []
+        for index, window in enumerate(window_features):
+             if self.car_exists(window):
+                car_windows.append(self.windows[index])
+        
+        return car_windows
+
 # img_cs = load_image('./project_video-frames/0000.jpg', params['color_space'])
 # cf = SingleFrameCarFinder(svc, X_scaler)
 # car_windows = cf.predict_cars(img_cs)
@@ -341,9 +347,17 @@ class VehicleIdentifier():
         self.labels = label(self.combined_heatmap)
         
         cars_seen = [False] * len(self.cars)
-        
+
+        car_boxes = []
         for car_no in range(1, self.labels[1]+1):
-            car_box = self.get_bounding_box(self.labels, car_no)
+            car_boxes.append(self.get_bounding_box(self.labels, car_no))
+
+        # for i in len(car_boxes):
+        #     for j in len(car_boxes):
+        #         if i != j:
+        #             self.remove_overlapping(car_boxes, i, j)
+
+        for car_box in car_boxes:
             car = self.get_car_for_bbox(car_box)
             
             if car is None:
@@ -358,11 +372,16 @@ class VehicleIdentifier():
 
                     car.frame_count += 1
                     if car.frame_count > FRAME_COUNT_MAYBE_CARS:
-                        self.cars.append(car)
-                        cars_seen.append(True)  # add a new car to the cars_seen array
 
-                        print('Remove from maybe cars and adding it to the active car list')
-                        maybe_cars.remove(car)
+                        w,h = get_w_h(car_box)
+                        if (w > 20) and (h > 20):
+                            self.cars.append(car)
+                            cars_seen.append(True)  # add a new car to the cars_seen array
+
+                            print('Remove from maybe cars and adding it to the active car list')
+                            maybe_cars.remove(car)
+                        else:
+                            print('Too small to be a car')
                 else:
                     # check how close are we to another car, may be its a  false
                     # bounding box from labels, we will add it to the possible cars array
@@ -384,7 +403,21 @@ class VehicleIdentifier():
 
             # may be it was a false prediction from labels and we are not going to add this car
             if car is not None:
-                car.update_box(car_box)
+                # maybe label is confused and giving us a rectangle that is either merged
+                # or very close to some other car, stick to our update DO NOT believe what
+                # label is saying
+                if (car.bounding_box is not None) and self.very_close_to_other(car_box):
+                    # how big or small is the new box compared to our old box
+                    cb_w, cb_h = get_w_h(car_box)
+                    car_w, car_h = get_w_h(car.bounding_box)
+
+                    delta_h = np.abs(car_w - cb_w)
+                    delta_w = np.abs(car_h - cb_h)
+
+                    if (delta_h / car_h < 0.5) and (delta_w / car_w < 0.5):
+                        car.update_box(car_box)
+                else:
+                    car.update_box(car_box)
             
         # is there a car that we did not see this time? if yes, maybe
         # it could have been overlapping
@@ -467,6 +500,16 @@ class VehicleIdentifier():
                     break
                 
         return very_close
+
+
+    # def remove_overlapping(self, cars, i, j):
+    #     # check if there is an overlap or not
+    #     box1 = cars[i]
+    #     box2 = cars[2]
+
+    #     if box1[1][0] > box2[0][0]:
+    #         box1
+
 
     # a car that used to be in the frame is no longer with us, lets
     # try to create a new window that is centered at the last point we 
@@ -588,8 +631,10 @@ class VehicleIdentifier():
 # plt.imshow(overlay_img)
 # plt.show()
 
-if os.path.exists('identifier.p'):
-    with open('identifier.p', 'rb') as f:
+id_filename = 'identifier-svm-only.p'
+
+if os.path.exists(id_filename):
+    with open(id_filename, 'rb') as f:
         try:
             identifier = pickle.load(f)
             print('Old identifier loaded with frame:', identifier.last_frame_no)
@@ -602,7 +647,7 @@ else:
     identifier = VehicleIdentifier()
     print('New identifier created')
 
-for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 101):
+for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 400):
     filename = './project_video-frames/{:04d}.jpg'.format(identifier.last_frame_no)
     
     # read RGB since thats what video will give us and then our function
@@ -620,14 +665,15 @@ for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.l
     output_img = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
     cv2.imwrite('./frame-cars/{:04d}.jpg'.format(identifier.last_frame_no), output_img)
 
-    with open('identifier.p', 'wb') as f:
+    with open(id_filename, 'wb') as f:
         pickle.dump(identifier, f)
+
     # print('Frame:', frame_no)
     # plt.imshow(output_img)
     # plt.show(block=False)
 
-# save a copy of the identifier for next time
-filename = 'identifier-{}.p'.format(identifier.last_frame_no)
-with open(filename, 'wb') as f:
-    pickle.dump(identifier, f)
-    print('Backup copy saved to:', filename)
+# # save a copy of the identifier for next time
+# filename = 'identifier-{}.p'.format(identifier.last_frame_no)
+# with open(filename, 'wb') as f:
+#     pickle.dump(identifier, f)
+#     print('Backup copy saved to:', filename)

@@ -6,36 +6,34 @@ from windows import *
 from collections import deque
 from scipy.ndimage.measurements import label
 
-with open('svm-yuv-16x2x11.p', 'rb') as f:
-    data = pickle.load(f)
-    svc = data['svm']
-    X_scaler = data['scaler']
-    params = data['params']
-    
-print('Data Loaded')
-print('SVC:', svc)
-print('Params', params)
 
-def colorspace2rgb(img_cs):
-    return cv2.cvtColor(img_cs, eval('cv2.COLOR_' + params['color_space'] + '2RGB'))
-
-def rgb2colorspace(img_rgb):
-    return cv2.cvtColor(img_rgb, eval('cv2.COLOR_RGB2' + params['color_space']))
-
+colors = [(255,0,0), (0,255,0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255,255,255),
+            (255, 0, 255), (255, 150, 0), (255, 0, 150), (150, 75, 0), (150, 0, 75)]
+        
 class SingleFrameCarFinder():
-    def __init__(self, svc, X_scaler):
+    def __init__(self, svc, X_scaler, params_for_feature):
+        global params
+        params = params_for_feature
+
         self.svc = svc
         self.X_scaler = X_scaler
         self.windows = None
         self.img_cs = None
         self.car_windows = []
         self.heatmap = None
+        self.params = params_for_feature
     
     def init_for_frame(self, img_cs):
         self.img_cs = img_cs
-        self.img_rgb = colorspace2rgb(self.img_cs)
+        self.img_rgb = self.colorspace2rgb(self.img_cs)
         self.heatmap = np.zeros(img_cs.shape[:2], np.float)
         self.car_windows = []
+
+    def colorspace2rgb(self, img_cs):
+        return cv2.cvtColor(img_cs, eval('cv2.COLOR_' + self.params['color_space'] + '2RGB'))
+
+    def rgb2colorspace(self, img_rgb):
+        return cv2.cvtColor(img_rgb, eval('cv2.COLOR_RGB2' + self.params['color_space']))
 
     def find_features_for_windows(self, windows):
         window_features = []
@@ -45,24 +43,24 @@ class SingleFrameCarFinder():
             window_img_64 = cv2.resize(window_img, (64,64))
 
             w_features = single_img_features(window_img_64, 
-                        spatial_size=params['spatial_size'],
-                        hist_bins=params['hist_bins'], 
-                        orient=params['orient'], 
-                        pix_per_cell=params['pix_per_cell'], 
-                        cell_per_block=params['cell_per_block'],
-                        hog_channel=params['hog_channel'],
-                        spatial_feat=params['spatial_feat'],
-                        hist_feat=params['hist_feat'], 
-                        hog_feat=params['hog_feat'],
+                        spatial_size=self.params['spatial_size'],
+                        hist_bins=self.params['hist_bins'], 
+                        orient=self.params['orient'], 
+                        pix_per_cell=self.params['pix_per_cell'], 
+                        cell_per_block=self.params['cell_per_block'],
+                        hog_channel=self.params['hog_channel'],
+                        spatial_feat=self.params['spatial_feat'],
+                        hist_feat=self.params['hist_feat'], 
+                        hog_feat=self.params['hog_feat'],
                         vis=False)
         
             window_features.append(w_features)
         
-        return X_scaler.transform(window_features)
+        return self.X_scaler.transform(window_features)
 
-    def find_features(self, img_cs):
+    def find_features(self):
         if self.windows is None:
-            self.windows = get_all_windows(img_cs)
+            self.windows = get_all_windows(self.img_cs)
         
         return self.find_features_for_windows(self.windows)
 
@@ -79,9 +77,12 @@ class SingleFrameCarFinder():
             cv2.rectangle(img, window[0], window[1], color, 4)
         return img
 
-    def add_heat(self, windows):
+    def add_heat(self, windows, heatmap = None):
+        if heatmap is None:
+            heatmap = self.heatmap
+
         for window in windows:
-            self.heatmap[window[0][1]:window[1][1], window[0][0]:window[1][0]] += 1
+            heatmap[window[0][1]:window[1][1], window[0][0]:window[1][0]] += 1
 
     def get_heat_img(self, heatmap = None, img = None, weight = (0.4,0.6)):
         if heatmap is None:
@@ -89,45 +90,47 @@ class SingleFrameCarFinder():
         if img is None:
             img = self.img_rgb
             
-        hot_colors = [(0,0,0), (90,0,0), (212,0,0), (255, 63, 0), (255,103,0), (255,225,0), (255,225,0), (255,225,0)]
+        hot_colors = [(90,0,0), (212,0,0), (255, 63, 0), (255,103,0), (255,225,0), (255,225,0), (255,225,0)]
 
         heatmap_clipped = np.clip(heatmap, 0, 255)
         
         max_heat = np.max(heatmap_clipped)
-        cap = len(hot_colors) - 1
+        cap = len(hot_colors)
         
         if max_heat >= cap:
-            # only change those colors which are > 0 
-            mask = heatmap_clipped > 0
-            heatmap_clipped[mask] = (heatmap_clipped[mask] / max_heat * cap + 1)
+            heatmap_clipped = (heatmap_clipped / max_heat) * cap
 
         heat_img = np.zeros(shape=self.img_rgb.shape).astype(np.uint8)
 
-        for index in range(0, cap):
-            mask = (heatmap_clipped > index) & (heatmap_clipped <= index + 1)
-            locations = np.where(mask)
-
-            if locations[0].shape[0] > 0:
-                heat_img[locations[0], locations[1]] = hot_colors[index + 1]
+        for index, color in enumerate(hot_colors):
+            heat_img[heatmap_clipped > index] = color
 
         return cv2.addWeighted(img, weight[0], heat_img, weight[1], 0)
         
     def car_exists(self, window_feature):
         return self.svc.predict([window_feature])
 
-    def predict_cars(self, img_cs):
+    def predict_cars(self, img_cs, ret_features = False, car_windows = None, window_features = None):
         self.init_for_frame(img_cs)
-        
-        window_features = self.find_features(img_cs)
-        
-        self.car_windows = []
-        for index, window in enumerate(window_features):
-             if self.car_exists(window):
-                self.car_windows.append(self.windows[index])
-        
+
+        if car_windows is None or window_features is None:
+            window_features = self.find_features()
+
+            self.car_windows = []
+            for index, w_feature in enumerate(window_features):
+                if self.car_exists(w_feature):
+                    self.car_windows.append(self.windows[index])
+        else:
+            window_features = window_features
+            self.car_windows = car_windows
+
         self.add_heat(self.car_windows)
-        return self.car_windows
         
+        if not ret_features:
+            return self.car_windows
+        else:
+            return self.car_windows, window_features
+
 # img_cs = load_image('./project_video-frames/0000.jpg', params['color_space'])
 # cf = SingleFrameCarFinder(svc, X_scaler)
 # car_windows = cf.predict_cars(img_cs)
@@ -164,6 +167,8 @@ RIGHT_THRESHOLD = 10
 LEFT_THRESHOLD = 20
 MAX_MISSFRAMES = 10
 MIN_FRAMES_TO_CENTER_SEARCH = 5
+FRAME_COUNT_MAYBE_CARS = 10
+MAX_FRAME_COUNT_MAYBE_CARS = 10
 
 class Vehicle():
     def __init__(self, car_no):
@@ -177,6 +182,7 @@ class Vehicle():
         self.frame_count = 0
         self.miss_frames = 0
         self.accounted_miss_frames = 0
+        self.frame_no_when_seen = 0 # which frame did we see this car
 
     def is_box_enclosing(self, box):
         return (self.center[0] >= box[0][0]) and (self.center[0] <= box[1][0])                 and (self.center[1] >= box[0][1]) and (self.center[1] <= box[1][1])
@@ -242,18 +248,22 @@ class Vehicle():
         return bounding_box
             
 class VehicleIdentifier():
-    def __init__(self):
+    def __init__(self, params_for_feature):
         self.min_frames = 20
         self.frames_to_avg = 10
         self.heatmaps = deque(maxlen = self.frames_to_avg)
         self.cars = []
         self.cars_gone_off = []
+        self.maybe_cars = []
         self.last_frame_no = 0  # helps in debugging, pickle object and then start again from same frame
-        self.car_finder = SingleFrameCarFinder(svc, X_scaler)
+        self.car_finder = SingleFrameCarFinder(svc, X_scaler, params_for_feature)
         self.car_windows = None
         self.add_windows = None # these are the ones that are re-created when we do not see a car
         self.combined_heatmap = []
         self.combined_heatmap_nonthreshold = []
+        self.img_cs = None
+        self.img_rgb = None
+        self.add_windows = None
         
     def get_bounding_box(self, labels, car_no):
         mask = labels[0] == car_no
@@ -267,11 +277,14 @@ class VehicleIdentifier():
         bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
         return bbox
 
-    def get_car_for_bbox(self, bbox):
+    def get_car_for_bbox(self, bbox, which_cars = None):
         car = None
         center = get_center(bbox)
         
-        for c in self.cars:
+        if which_cars is None:
+            which_cars = self.cars
+
+        for c in which_cars:
             #if c.is_within_bounds(center):
             if (c.center[0] >= bbox[0][0]) and (c.center[0] <= bbox[1][0]) and (c.center[1] >= bbox[0][1]) and (c.center[1] <= bbox[1][1]):
                 car = c
@@ -280,9 +293,6 @@ class VehicleIdentifier():
         return car
     
     def draw_labels_img(self, labels):
-        colors = [(255,0,0), (0,255,0), (0, 0, 255), (255, 255, 0), (0, 255, 255),
-                  (255, 0, 255), (255, 150, 0), (255, 0, 150), (150, 75, 0), (150, 0, 75)]
-
         labels_img = np.zeros_like(self.img_rgb)
 
         # add more colors to the array in case there are more labels than number of defined colors
@@ -299,7 +309,8 @@ class VehicleIdentifier():
 
     def draw_cars(self, output_img):
         for car in self.cars:
-            cv2.rectangle(output_img, car.bounding_box[0], car.bounding_box[1], (0,255,0), 6)
+            color_index = car.car_no % len(colors)
+            cv2.rectangle(output_img, car.bounding_box[0], car.bounding_box[1], colors[color_index], 6)
 
     def make_bounding_box(self, boxes):
         if len(boxes) < 2:
@@ -317,7 +328,7 @@ class VehicleIdentifier():
         box = (x1,y1),(x2,y2)
         return box
 
-    def figure_out_cars(self, boxes):
+    def figure_out_cars(self, windows):
         self.combined_heatmap = np.sum(self.heatmaps, axis=0)
         #self.combined_heatmap = np.average(self.heatmaps, axis=0)
         self.combined_heatmap_nonthreshold = np.copy(self.combined_heatmap)
@@ -329,56 +340,202 @@ class VehicleIdentifier():
         
         self.labels = label(self.combined_heatmap)
         
-        cars_seen = [False] * len(self.cars)
-        
+        # create a dictionary for all cars we know off
+        # check which ones are not here in this frame and mark their miss_frame count
+        cars_seen_this_frame = {}
+
+        for car in self.cars:
+            cars_seen_this_frame[car] = False
+
+        # gather all car boxes for this frame
+        car_boxes = []
         for car_no in range(1, self.labels[1]+1):
-            car_box = self.get_bounding_box(self.labels, car_no)
+            car_boxes.append(self.get_bounding_box(self.labels, car_no))
+
+        # identify new cars and remove old ones
+        for car_box in car_boxes:
             car = self.get_car_for_bbox(car_box)
             
             if car is None:
-                print('We have never seen this car # before. box:', car_box)
+                print('There is a possible car at box: {}, lets look for an already maybe_car we might have'.format(car_box))
 
-                # check how close are we to another car, may be its a  false
-                # bounding box from labels, we will add it to the possible cars array
-                # and will see if it is still there after some frames or not
+                # Check in case we already have this bounding box in a maybe_car.
+                # Increment frame connt and see if it is to be moved to a car now
+                car = self.get_car_for_bbox(car_box, which_cars = self.maybe_cars)
 
-                car = Vehicle(car_no)
-                
-                self.cars.append(car)
-                cars_seen.append(True)  # add a new car to the cars_seen array
+                if car is not None:
+                    print('Ok we found a maybe car, lets see if this one was recent or very old')
+
+                    no_of_frames_passed = self.last_frame_no - car.frame_no_when_seen 
+                    
+                    # in case the car we found in the maybe list is very old and is a zoombie
+                    # don't consider it the same car at all
+                    
+                    if no_of_frames_passed > MAX_FRAME_COUNT_MAYBE_CARS:
+                        print('An old maybe car, earlier seen at {} found, resurrecting it but still a maybe not actual'.format(car.frame_no_when_seen))
+
+                        car.frame_no_when_seen = self.last_frame_no
+                        car.frame_count = 1
+                        car.bounding_box = car_box
+                    else:
+                        print('Recent may_be, last seen {} frames ago. Total frames: {} Total Required: {} .'.format(no_of_frames_passed, car.frame_count, FRAME_COUNT_MAYBE_CARS))
+
+                        car.frame_count += 1
+                        
+                        # there should be at least 5  frames that the car is visible for and
+                        # it should be visible at least in 50% of the last frames
+                        if (car.frame_count > FRAME_COUNT_MAYBE_CARS) and (car.frame_count / no_of_frames_passed > 0.5):
+                            w,h = get_w_h(car_box)
+                            if (w > 20) and (h > 20):
+                                self.cars.append(car)
+                                cars_seen_this_frame[car] = True  # add a new car to the cars_seen array
+
+                                print('Remove from maybe cars and adding it to the active car list')
+                                self.maybe_cars.remove(car)
+                            else:
+                                print('Too small to be a car')
+                else:
+                    # check how close are we to another car, may be its a  false
+                    # bounding box from labels, we will add it to the possible cars array
+                    # and will see if it is still there after some frames or not
+
+                    if (len(self.cars) > 1) and (not self.very_close_to_other(car_box)):
+                        car = Vehicle(car_no)
+                        car.frame_no_when_seen = self.last_frame_no
+
+                        self.cars.append(car)
+                        cars_seen_this_frame[car] = True  # add a new car to the cars_seen array
+                    else:
+                        car = Vehicle(car_no)
+                        car.frame_no_when_seen = self.last_frame_no
+                        
+                        self.maybe_cars.append(car)
             else:
-                cars_seen[car.car_no - 1] = True
-            
-            car.update_box(car_box)
+                cars_seen_this_frame[car] = True
+
+            # may be it was a false prediction from labels and we are not going to add this car
+            if car is not None:
+                # maybe label is confused and giving us a rectangle that is either merged
+                # or very close to some other car, stick to our update DO NOT believe what
+                # label is saying
+                if (car.bounding_box is not None) and self.very_close_to_other(car_box):
+                    # how big or small is the new box compared to our old box
+                    cb_w, cb_h = get_w_h(car_box)
+                    car_w, car_h = get_w_h(car.bounding_box)
+
+                    delta_h = np.abs(car_w - cb_w)
+                    delta_w = np.abs(car_h - cb_h)
+
+                    if (delta_h / car_h < 0.5) and (delta_w / car_w < 0.5):
+                        car.update_box(car_box)
+                else:
+                    car.update_box(car_box)
             
         # is there a car that we did not see this time? if yes, maybe
         # it could have been overlapping
-        for i in range(len(cars_seen)):
-            if cars_seen[i] == False:
-                car = self.cars[i]
-                debug('did not see car #', car.car_no, 'speed:', car.speed)
-                # make sure bounding box has not been overlapped with some other's
-                car_boxes = []
-                for box in boxes:
-                    if car.is_box_enclosing(box):
-                        car_boxes.append(box)
+        for car in cars_seen_this_frame:
+            if cars_seen_this_frame[car] == False:
+                print('Did not see car #', car.car_no, ' speed:', car.speed)
+                
+                # check if there were any boxes in which this car was detected?
+                car_windows = []
+                for window in windows:
+                    if car.is_box_enclosing(window):
+                        car_windows.append(window)
 
-                if len(car_boxes) > 0:
-                    bbox = self.make_bounding_box(car_boxes)
+                if len(car_windows) > 0:
+                    print('Looks like there were some windows')
+
+                    # make a local heatmap, find an enclosing box around it and then
+                    # use that to update the car bounding box
+                    heatmap = np.zeros(shape=self.img_cs.shape[:2])
+                    self.car_finder.add_heat(car_windows, heatmap)
+
+                    heatmap /= np.max(heatmap)
+                    heatmap[heatmap < 0.7] = 0
+                    zy, zx = heatmap.nonzero()
+                    left = np.min(zx)
+                    right = np.max(zx)
+                    top = np.min(zy)
+                    bottom = np.max(zy)
+
+                    #bbox = self.make_bounding_box(car_windows)
+                    bbox = ((left, top), (right,bottom))
                     car.update_box(bbox)
-                    cars_seen[i] = True
+                    cars_seen_this_frame[car] = True
                 else:
-                    cars_seen[i] = self.car_gone_out(car)
+                    cars_seen_this_frame[car] = self.car_gone_out(car)
 
         # remove all cars that were not seen
-        existing_cars = self.cars
-        self.cars = []
-        for i in range(len(cars_seen)):
-            if cars_seen[i]:
-                self.cars.append(existing_cars[i])
-            else:
-                self.cars_gone_off.append(existing_cars[i])
-        
+        for index, car in enumerate(self.cars):
+            if not cars_seen_this_frame[car]:
+                self.cars_gone_off.append(car)
+                del self.cars[index]
+
+        # # check maybe cars might need to be kicked out now
+        # if len(self.maybe_cars) > 0:
+        #     copy_maybe_cars = self.maybe_cars
+        #     self.maybe_cars = []
+        #     for car in copy_maybe_cars:
+        #         if self.last_frame_no - (car.frame_no_when_seen + car.frame_count) < FRAME_COUNT_MAYBE_CARS:
+        #             self.maybe_cars.append(car)
+
+    def very_close_to_other(self, box):
+        very_close = False
+
+        y_closeness_x = [(475,125), (300,20), (0, 10)]
+
+        for car in self.cars:
+            car_leftx = car.bounding_box[0][0]
+            car_lefty = car.bounding_box[1][1]
+            car_rightx = car.bounding_box[1][0]
+            car_righty = car.bounding_box[1][1]
+
+            if box[1][0] < car_leftx:
+                # to the left of this car
+                distance_x = car_leftx - box[1][0]
+
+                what_is_close = 0
+
+                for y_based_distance in y_closeness_x:
+                    if car_lefty > y_based_distance[0]:
+                        what_is_close = y_based_distance[1]
+                        break
+
+                if distance_x < what_is_close:
+                    # now we need to check how close is it in Y
+                    #distance_yb = car.bounding_box[1][1] - box[1][1]
+                    very_close = True
+                    break
+            elif box[1][0] > car_rightx:
+                # to the left of this car
+                distance_x = box[1][0] - car_rightx
+
+                what_is_close = 0
+
+                for y_based_distance in y_closeness_x:
+                    if car_righty > y_based_distance[0]:
+                        what_is_close = y_based_distance[1]
+                        break
+
+                if distance_x < what_is_close:
+                    # now we need to check how close is it in Y
+                    #distance_yb = car.bounding_box[1][1] - box[1][1]
+                    very_close = True
+                    break
+                
+        return very_close
+
+
+    # def remove_overlapping(self, cars, i, j):
+    #     # check if there is an overlap or not
+    #     box1 = cars[i]
+    #     box2 = cars[2]
+
+    #     if box1[1][0] > box2[0][0]:
+    #         box1
+
+
     # a car that used to be in the frame is no longer with us, lets
     # try to create a new window that is centered at the last point we 
     # knew for the car and then see may be it is still there
@@ -466,18 +623,21 @@ class VehicleIdentifier():
             output_img[0:180,640:960] = cv2.resize(heat_img, (320, 180))
             output_img[0:180,960:1280] = cv2.resize(labels_img, (320,180))
 
+            cv2.putText(output_img, "This Frame", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+            cv2.putText(output_img, "{} Heatmaps".format(self.frames_to_avg), (330, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
+            cv2.putText(output_img, "Thresholded", (650, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 1)
             cv2.putText(output_img, "Cars: {}".format(len(self.cars)), (970, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,255,0), 2)
         
         return output_img
 
-    def process_frame(self, img_rgb):
+    def process_frame(self, img_rgb, car_windows = None, window_features = None):
         debug('Processing image, len(car)', len(self.cars))
         
         self.add_windows = None
         self.img_rgb = img_rgb
-        self.img_cs = rgb2colorspace(img_rgb)
+        self.img_cs = self.car_finder.rgb2colorspace(img_rgb)
         
-        self.car_windows = self.car_finder.predict_cars(self.img_cs)
+        self.car_windows = self.car_finder.predict_cars(self.img_cs, car_windows = car_windows, window_features = window_features)
 
         self.heatmaps.append(self.car_finder.heatmap)
         
@@ -486,59 +646,97 @@ class VehicleIdentifier():
 
         return self.overlay_images()
 
-# car = Vehicle(1)
-# car.center = (500,500)
-# print(car.make_box_from_center(100,100))
 
-# filename = './project_video-frames/0000.jpg'
-# img_rgb = load_image(filename, 'RGB')
+if __name__ == '__main__':
+    with open('svm-yuv-16x2x11.p', 'rb') as f:
+        data = pickle.load(f)
+        svc = data['svm']
+        X_scaler = data['scaler']
+        params = data['params']
+        
+    print('Data Loaded')
+    print('SVC:', svc)
+    print('Params', params)
+    # car = Vehicle(1)
+    # car.center = (500,500)
+    # print(car.make_box_from_center(100,100))
 
-# vi = VehicleIdentifier()
-# overlay_img = vi.process_frame(img_rgb)
+    # filename = './project_video-frames/0000.jpg'
+    # img_rgb = load_image(filename, 'RGB')
 
-# plt.imshow(overlay_img)
-# plt.show()
+    # vi = VehicleIdentifier()
+    # overlay_img = vi.process_frame(img_rgb)
 
-if os.path.exists('identifier.p'):
-    with open('identifier.p', 'rb') as f:
-        try:
-            identifier = pickle.load(f)
-            print('Old identifier loaded with frame:', identifier.last_frame_no)
-        except EOFError as e:
-            print(e)
-            print('Loading a new identifier')
-            identifier = VehicleIdentifier()
-            identifier.threshold = 20
-else:
-    identifier = VehicleIdentifier()
-    print('New identifier created')
-
-for identifier.last_frame_no in range(identifier.last_frame_no + 1, 708):
-    filename = './project_video-frames/{:04d}.jpg'.format(identifier.last_frame_no)
-    
-    # read RGB since thats what video will give us and then our function
-    # internally converts it to LAB
-    img = load_image(filename, 'RGB')
-
-    t1 = time.time()
-    output_img = identifier.process_frame(img)
-    t2 = time.time()
-    print('Frame {}, time taken {:.3f} secs'.format(identifier.last_frame_no, t2 - t1))
-
-    # plt.imshow(output_img)
+    # plt.imshow(overlay_img)
     # plt.show()
-    
-    output_img = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
-    cv2.imwrite('./frame-cars/{:04d}.jpg'.format(identifier.last_frame_no), output_img)
 
-    with open('identifier.p', 'wb') as f:
-        pickle.dump(identifier, f)
-    # print('Frame:', frame_no)
-    # plt.imshow(output_img)
-    # plt.show(block=False)
+    def get_frame_filenames(index):
+        filename = './project_video-frames/{:04d}.jpg'.format(index)
+        window_filename = './project_video-frames/car_windows/{:04d}.p'.format(index)
 
-# save a copy of the identifier for next time
-filename = 'identifier-{}.p'.format(identifier.last_frame_no)
-with open(filename, 'wb') as f:
-    pickle.dump(identifier, f)
-    print('Backup copy saved to:', filename)
+        if not os.path.exists(window_filename):
+            window_filename = None
+        
+        return filename, window_filename
+
+        
+    id_filename = './data/identifier.p'
+
+    if os.path.exists(id_filename):
+        with open(id_filename, 'rb') as f:
+            try:
+                identifier = pickle.load(f)
+                print('Old identifier loaded with frame:', identifier.last_frame_no)
+            except EOFError as e:
+                print(e)
+                print('Loading a new identifier')
+                identifier = VehicleIdentifier(params)
+                identifier.threshold = 20
+    else:
+        identifier = VehicleIdentifier(params)
+        print('New identifier created')
+
+
+    for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 400):
+        #filename = './project_video-frames/{:04d}.jpg'.format(identifier.last_frame_no)
+        filename, window_filename = get_frame_filenames(identifier.last_frame_no)
+        
+        # read RGB since thats what video will give us and then our function
+        # internally converts it to LAB
+        img = load_image(filename, 'RGB')
+        
+        # load window data and features if that has been saved
+        t1 = time.time()
+        if window_filename is not None:
+            with open(window_filename, 'rb') as f:
+                window_data = pickle.load(f)
+                car_windows = window_data['windows']
+                window_features = window_data['features']
+
+        output_img = identifier.process_frame(img, car_windows = car_windows, window_features = window_features)
+        t2 = time.time()
+        print('Frame {}, time taken {:.3f} secs'.format(identifier.last_frame_no, t2 - t1))
+
+        # plt.imshow(output_img)
+        # plt.show()
+        
+        output_img = cv2.cvtColor(output_img, cv2.COLOR_RGB2BGR)
+        cv2.imwrite('./frame-cars/{:04d}.jpg'.format(identifier.last_frame_no), output_img)
+
+        with open(id_filename, 'wb') as f:
+            pickle.dump(identifier, f)
+
+        if (identifier.last_frame_no % 20) == 0:
+            filename_20 = './data/identifier-{}.p'.format(identifier.last_frame_no)
+            with open(filename_20, 'wb') as f:
+                pickle.dump(identifier, f)
+
+        # print('Frame:', frame_no)
+        # plt.imshow(output_img)
+        # plt.show(block=False)
+
+    # save a copy of the identifier for next time
+    # filename = './data/identifier-{}.p'.format(identifier.last_frame_no)
+    # with open(filename, 'wb') as f:
+    #     pickle.dump(identifier, f)
+    #     print('Backup copy saved to:', filename)

@@ -181,9 +181,9 @@ Classes Used:
 + If it does, good, tell the car to compute estimates of its speed, expand / contract its bounding box
 + If the box does not belong to a car, create a vehicle but add it to the set (maybe_cars)
 + Each frame, check maybe_cars to see if any box specified by the Label fits them
-+ If for 5 frames, a maybe_car is still found to be there, classify it as a car and put it in self.cars
++ If for 5 frames, a maybe_car is still found to be there, classify it as a car and put it in self.cars. This is reason you would notice at the beginning of the video, threshold and Label have identified a car but the actual rectangle on the car takes a short while to appear. But this was ncessary since Label does a very bad job and some times it would show 3 cars rather than 2, so in order to get rid of these I am waiting for a few frames to make sure a car is identified
 + Each frame, check for cars that were there before but are no longer there any more (Line # 567)
-+ For each such car that has not been identified by the SVC, a new bounding box is created and it is re-searched by the SVC to make sure the car isn't there (Line #587)
++ For a car that has not been identified by the SVC, a new bounding box is created and it is re-searched by the SVC to make sure the car isn't in the frame any more (Line #587)
 
 A low pass filter has been implemented that expands / moves the bounding box of each vehicle based on the last bounding box's center and the current bounding box's center (Line # 219) But I am not happy with the end result as the car is not completely enclosed
 

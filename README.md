@@ -252,9 +252,9 @@ Label not correctly telling us about 2 cars:
 
 1) I am not at all happy with the bounding algorithm used. Right now it just considers all of the boxes that are in the heat map and the bigger box towards the bottom frame just makes the box more elongated. Maybe would later on implement a dynamic box that expands (or contracts) to come up with a best fit window.
 
-2) The low pass filter implemented for bounding box update is not that great. Would like to update this with a kalman filter.
+2) The low pass filter implemented for bounding box update is not that great. Would like to update this as well as other estimator with a kalman filter.
 
-3) The overall algorithm for keeping track of each car's estimates requires a lot to be done. May be a kalman filter can be used here.
+3) Towards the end of the video, the algorithm finds three cars as it keeps on thinking that the box for the black car has two cars in it. It is a very reduamentary algorithm and definitely needs to be worked upon for better car detection.
 
 #### Faster Process
 
@@ -262,5 +262,5 @@ The process is still very slow at 0.5 secs / frame. Would like to increase this.
 
 #### Z Space
 
-There is no concept of the third dimension. Somehow would like to keep track of how deep a vehicle is from other vehicles to better detect overlaps
+There is no concept of depth in the code. If somehow I can tell, which car is behind, may be that can be used to better tell when an overlap occurs.
 

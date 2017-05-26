@@ -148,12 +148,14 @@ In the following image the left hand side shows individual window sizes with no 
 
 These are defined in [process.ipynb](process.ipynb) block labeled *Different Sliding Window Sizes*
 
-|Window Name|Window Size|Overlapping|X Start / Stop | Y Start / Stop|
-|-|-|-|-|-|
-|Medium|176x176|0.4, 0|0, 1280|400,600|
-|Small|112x112|0.3, 0.5|0, 1280|390,550|
-|Smallest|90x90|0.4, 0.4|40, 1270|380,550|
-|Tiny|90x90|0.4, 0.4|40, 450,980|400,500|
+|Window Name|Window Size|Overlapping|X Start / Stop | Y Start / Stop| # of windows
+|-|-|-|-|-|-|
+|Medium|176x176|0.4, 0|0, 1280|400,600|16|
+|Small|112x112|0.3, 0.5|0, 1280|390,550|35|
+|Smallest|90x90|0.4, 0.4|40, 1270|380,550|93|
+|Tiny|90x90|0.4, 0.4|450,980|400,500|13|
+
+Total: 157 windows
 
 ![window-shapes]
 

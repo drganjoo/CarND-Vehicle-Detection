@@ -1,10 +1,11 @@
 import matplotlib.pyplot as plt
-import cv2, os, time, pickle, threading
+import cv2, os, time, pickle, threading, glob, shutil
 import numpy as np
 from lesson_functions import *
 from windows import *
 from collections import deque
 from scipy.ndimage.measurements import label
+import sys
 
 # colors used for different bounding boxes for each car and for the label's image shown on right
 colors = [(255,0,0), (0,255,0), (0, 0, 255), (255, 255, 0), (0, 255, 255), (255,255,255),
@@ -590,7 +591,7 @@ class VehicleIdentifier():
         car_windows = []
         for index, cw_features in enumerate(centered_windows_features):
             if self.car_finder.car_exists(cw_features):
-                cw = car_windows[index]
+                cw = centered_windows[index]
                 car_windows.append(cw)
 
         car_seen = False                
@@ -672,41 +673,49 @@ class VehicleIdentifier():
         if len(self.heatmaps) >= self.frames_to_avg:
             self.figure_out_cars(self.car_windows)
 
+        self.last_frame_no += 1
         return self.overlay_images()
 
-
 if __name__ == '__main__':
-    with open('svm-yuv-16x2x11.p', 'rb') as f:
+    svm_file = 'svm-yuv-16x2x11.p'
+    with open(svm_file, 'rb') as f:
         data = pickle.load(f)
         svc = data['svm']
         X_scaler = data['scaler']
         params = data['params']
-        
-    print('Data Loaded')
-    print('SVC:', svc)
-    print('Params', params)
-    # car = Vehicle(1)
-    # car.center = (500,500)
-    # print(car.make_box_from_center(100,100))
 
-    # filename = './project_video-frames/0000.jpg'
-    # img_rgb = load_image(filename, 'RGB')
+    frame_folder = 'project_video-frames'
 
-    # vi = VehicleIdentifier()
-    # overlay_img = vi.process_frame(img_rgb)
+    def process_movie():
+        from moviepy.editor import VideoFileClip
 
-    # plt.imshow(overlay_img)
-    # plt.show()
+        # load parameters saved by the training process
 
+        # load identifier and pass it the svc, scaler and params
+        identifier = VehicleIdentifier(params, svc, X_scaler)
+
+        video_filename = 'project_video.mp4'
+        clip = VideoFileClip(video_filename)
+
+        video_with_cars = clip.fl_image(identifier.process_frame)
+
+        output = os.path.splitext(video_filename)
+        output_file = output[0] + "_check" + output[1]
+
+        video_with_cars.write_videofile(output_file, audio=False)
+        print('File saved to:', output_file)
+
+    process_movie()
+    sys.exit(0)
+    
+
+    # Using features already extracted into folder, predict car boxes and thresholding
     def get_frame_filenames(index):
         filename = './project_video-frames/{:04d}.jpg'.format(index)
         window_filename = './project_video-frames/car_windows/{:04d}.p'.format(index)
-
         if not os.path.exists(window_filename):
             window_filename = None
-        
         return filename, window_filename
-
         
     id_filename = './data/identifier.p'
 
@@ -724,9 +733,8 @@ if __name__ == '__main__':
         identifier = VehicleIdentifier(params, svc, X_scaler)
         print('New identifier created')
 
-    #for identifier.last_frame_no in range(identifier.last_frame_no + 1, identifier.last_frame_no + 400):
-    for identifier.last_frame_no in range(identifier.last_frame_no, 1280):
-        #filename = './project_video-frames/{:04d}.jpg'.format(identifier.last_frame_no)
+    index = identifier.last_frame_no
+    for index in range(identifier.last_frame_no, 1280):
         filename, window_filename = get_frame_filenames(identifier.last_frame_no)
         
         # read RGB since thats what video will give us and then our function
@@ -760,12 +768,8 @@ if __name__ == '__main__':
             with open(filename_20, 'wb') as f:
                 pickle.dump(identifier, f)
 
-        # print('Frame:', frame_no)
-        # plt.imshow(output_img)
-        # plt.show(block=False)
-
-    # save a copy of the identifier for next time
-    # filename = './data/identifier-{}.p'.format(identifier.last_frame_no)
-    # with open(filename, 'wb') as f:
-    #     pickle.dump(identifier, f)
-    #     print('Backup copy saved to:', filename)
+    #save a copy of the identifier for next time
+    filename = './data/identifier-{}.p'.format(identifier.last_frame_no)
+    with open(filename, 'wb') as f:
+        pickle.dump(identifier, f)
+        print('Backup copy saved to:', filename)

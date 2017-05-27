@@ -148,7 +148,6 @@ def get_all_windows(img):
     windows.extend(tiny_window(img))
     return windows
 
-
 if __name__ == '__main__':
     print(len(get_all_windows(np.zeros(shape=(720,1280,3)))))
     print(len(get_all_window_sizes(np.zeros(shape=(720,1280,3)))))

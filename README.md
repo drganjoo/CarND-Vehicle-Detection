@@ -29,10 +29,15 @@ Project video is available at [./project_video_cars.mp4](./project_video_cars.mp
 
 The training part has been coded in a jupyter notebook, where as vehicle identification pipeline has been coded as python files.
 
-[VehicleDetection-Training](training.ipynb)  
-[Exploration](exploration.ipynb)  
-[process](process.ipynb) ** playing around with window sizes / detection **  
-[car_finder.py](car_finder.py)  
+[VehicleDetection-Training](training.ipynb)  ** Used for SVM training **
+[window_testing](window_testing.ipynb) ** Different window size / heat map tests **  
+[car_finder.py](car_finder.py)  ** Main car detection code that used thresholded heatmaps **
+[Exploration](exploration.ipynb)  ** Various color spaces etc. that were tested **
+
+Some helper files:
+
+[windows.py](windows.py)  ** Definition of window sizes **
+[lesson_functions.py](lesson_functions.py)  ** Misc functions from the lessons like get_hog_feature etc. **
 
 ### Data Used For Training
 
